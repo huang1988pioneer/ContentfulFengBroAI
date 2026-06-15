@@ -1,5 +1,5 @@
 import type { APIEvent } from "@solidjs/start/server";
-import { getContentfulEnv } from "../../lib/env";
+import { getContentfulEnv, normalizeContentfulToken, normalizeContentfulValue } from "../../lib/env";
 
 type ContentfulSettings = {
   spaceId?: string;
@@ -48,12 +48,12 @@ function entryTitle(entry: unknown) {
 export async function POST(event: APIEvent) {
   const settings = (await event.request.json()) as ContentfulSettings;
   const env = getContentfulEnv({ allowMissingTokens: true });
-  const spaceId = settings.spaceId?.trim() || env.spaceId;
-  const environmentId = settings.environmentId?.trim() || env.environmentId;
+  const spaceId = normalizeContentfulValue(settings.spaceId) || env.spaceId;
+  const environmentId = normalizeContentfulValue(settings.environmentId) || env.environmentId;
   const token = settings.usePreview
-    ? settings.previewToken?.trim() || env.previewToken
-    : settings.deliveryToken?.trim() || env.deliveryToken;
-  const locale = settings.locale?.trim() || env.locale;
+    ? normalizeContentfulToken(settings.previewToken) || env.previewToken
+    : normalizeContentfulToken(settings.deliveryToken) || env.deliveryToken;
+  const locale = normalizeContentfulValue(settings.locale) || env.locale;
 
   if (!spaceId) {
     return jsonResponse({ ok: false, message: "Please enter a Contentful Space ID." }, 400);
@@ -73,7 +73,6 @@ export async function POST(event: APIEvent) {
 
   const host = settings.usePreview ? "preview.contentful.com" : "cdn.contentful.com";
   const url = new URL(`https://${host}/spaces/${encodeURIComponent(spaceId)}/environments/${encodeURIComponent(environmentId)}/entries`);
-  url.searchParams.set("access_token", token);
   url.searchParams.set("limit", "1");
 
   if (locale) {
@@ -81,7 +80,11 @@ export async function POST(event: APIEvent) {
   }
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok) {

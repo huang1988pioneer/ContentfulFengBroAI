@@ -13,14 +13,27 @@ export type ContentfulEnv = {
   locale: string;
 };
 
+export function normalizeContentfulValue(value?: string) {
+  const cleaned = (value ?? "").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+  const quoted =
+    (cleaned.startsWith("\"") && cleaned.endsWith("\"")) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"));
+
+  return quoted ? cleaned.slice(1, -1).trim() : cleaned;
+}
+
+export function normalizeContentfulToken(value?: string) {
+  return normalizeContentfulValue(normalizeContentfulValue(value).replace(/^Bearer\s+/i, ""));
+}
+
 export function getContentfulEnv(options: ContentfulEnvOptions = {}): ContentfulEnv {
   const env = {
-    spaceId: process.env.CONTENTFUL_SPACE_ID ?? "",
-    environmentId: process.env.CONTENTFUL_ENVIRONMENT_ID ?? "master",
-    deliveryToken: process.env.CONTENTFUL_DELIVERY_TOKEN ?? "",
-    previewToken: process.env.CONTENTFUL_PREVIEW_TOKEN ?? "",
-    managementToken: process.env.CONTENTFUL_MANAGEMENT_TOKEN ?? "",
-    locale: process.env.CONTENTFUL_LOCALE ?? "en-US"
+    spaceId: normalizeContentfulValue(process.env.CONTENTFUL_SPACE_ID),
+    environmentId: normalizeContentfulValue(process.env.CONTENTFUL_ENVIRONMENT_ID) || "master",
+    deliveryToken: normalizeContentfulToken(process.env.CONTENTFUL_DELIVERY_TOKEN),
+    previewToken: normalizeContentfulToken(process.env.CONTENTFUL_PREVIEW_TOKEN),
+    managementToken: normalizeContentfulToken(process.env.CONTENTFUL_MANAGEMENT_TOKEN),
+    locale: normalizeContentfulValue(process.env.CONTENTFUL_LOCALE) || "en-US"
   };
 
   const missing = options.allowMissingSpace

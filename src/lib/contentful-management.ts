@@ -4,7 +4,7 @@ import {
   type CreateContentTypeProps,
   type PlainClientAPI
 } from "contentful-management";
-import { getContentfulEnv } from "./env";
+import { getContentfulEnv, normalizeContentfulToken, normalizeContentfulValue } from "./env";
 import { TABLE_SCHEMA_LIST, type TableAttribute, type TableSchema } from "./table-schemas";
 
 type ContentfulSettings = {
@@ -102,9 +102,9 @@ export async function initializeContentfulTables(
 
 function getManagementContext(settings: ContentfulSettings): ManagementContext {
   const env = getContentfulEnv({ allowMissingTokens: true });
-  const spaceId = settings.spaceId?.trim() || env.spaceId;
-  const environmentId = settings.environmentId?.trim() || env.environmentId;
-  const accessToken = settings.managementToken?.trim() || env.managementToken;
+  const spaceId = normalizeContentfulValue(settings.spaceId) || env.spaceId;
+  const environmentId = normalizeContentfulValue(settings.environmentId) || env.environmentId;
+  const accessToken = normalizeContentfulToken(settings.managementToken) || env.managementToken;
 
   if (!spaceId || !accessToken) {
     throw new Error("CONTENTFUL_SPACE_ID and CONTENTFUL_MANAGEMENT_TOKEN are required.");
