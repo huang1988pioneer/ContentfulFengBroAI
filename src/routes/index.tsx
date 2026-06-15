@@ -89,6 +89,7 @@ const text = {
   initAll: "\u521D\u59CB\u5316\u5168\u90E8 Table",
   initializingAll: "\u521D\u59CB\u5316\u4E2D...",
   initSingle: "\u521D\u59CB\u5316",
+  clearLocalSettings: "\u6E05\u9664\u672C\u6A5F\u8A2D\u5B9A",
   unknownError: "\u767C\u751F\u672A\u77E5\u932F\u8AA4",
   missingMgmtToken:
     "\u8ACB\u5148\u586B\u5165 Contentful Management Token\uff0c\u6216\u5728\u90E8\u7F72\u5E73\u53F0\u8A2D\u5B9A CONTENTFUL_MANAGEMENT_TOKEN \u5F8C\u91CD\u65B0\u90E8\u7F72\u3002",
@@ -190,6 +191,26 @@ export default function Home() {
     }
     setIsSaved(true);
     window.setTimeout(() => setIsSaved(false), 1800);
+  };
+
+  const clearLocalSettings = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
+    const config = currentServerConfig();
+    setSettings({
+      ...defaultSettings,
+      spaceId: config?.values.spaceId ?? "",
+      environmentId: config?.values.environmentId ?? "master",
+      locale: config?.values.locale ?? ""
+    });
+    setResult(null);
+    setTables([]);
+    setTableMessage({
+      ok: true,
+      message:
+        "Local browser settings cleared. Blank token fields will now use deployment environment variables."
+    });
   };
 
   const currentServerConfig = () => {
@@ -471,6 +492,9 @@ export default function Home() {
         </Show>
 
         <div class="actions">
+          <button class="secondary" type="button" onClick={clearLocalSettings}>
+            {text.clearLocalSettings}
+          </button>
           <button class="secondary" type="button" onClick={saveSettings}>
             {isSaved() ? text.saved : text.saveSettings}
           </button>

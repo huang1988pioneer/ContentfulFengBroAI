@@ -20,6 +20,7 @@ function jsonResponse(body: unknown, status = 200) {
 function contentfulErrorResponse(error: unknown, context: RequestContext) {
   const raw = error instanceof Error ? error.message : String(error);
   const status = getErrorStatus(error, raw);
+  const contentfulMessage = getContentfulMessage(raw);
   const tokenSource = context.hasPageToken
     ? "the token entered on this page"
     : "CONTENTFUL_MANAGEMENT_TOKEN from the deployment environment";
@@ -32,7 +33,7 @@ function contentfulErrorResponse(error: unknown, context: RequestContext) {
         message:
           `Contentful rejected ${tokenSource} for ${target}. ` +
           "Confirm it is a Content Management API token (CMA token) with access to this Space, not a Delivery/Preview token. " +
-          `Contentful said: ${raw}`
+          `Contentful said: ${contentfulMessage}.`
       },
       401
     );
@@ -68,6 +69,24 @@ function getErrorStatus(error: unknown, raw: string) {
 
   const match = raw.match(/"status"\s*:\s*(\d{3})/);
   return match ? Number(match[1]) : 0;
+}
+
+function getContentfulMessage(raw: string) {
+  const parsed = parseJsonLikeMessage(raw);
+  if (parsed?.message) return parsed.message;
+  if (raw.includes("Access token invalid")) return "Access token invalid";
+  return raw.split("\n")[0].slice(0, 240);
+}
+
+function parseJsonLikeMessage(raw: string): { message?: string } | null {
+  const jsonStart = raw.indexOf("{");
+  if (jsonStart === -1) return null;
+
+  try {
+    return JSON.parse(raw.slice(jsonStart)) as { message?: string };
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(event: APIEvent) {
