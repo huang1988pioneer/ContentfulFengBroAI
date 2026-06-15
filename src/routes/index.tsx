@@ -91,9 +91,9 @@ const text = {
   initSingle: "\u521D\u59CB\u5316",
   unknownError: "\u767C\u751F\u672A\u77E5\u932F\u8AA4",
   missingMgmtToken:
-    "\u8ACB\u5148\u586B\u5165 Contentful Management Token\uff0c\u6216\u5728 Stormkit \u8A2D\u5B9A CONTENTFUL_MANAGEMENT_TOKEN \u5F8C\u91CD\u65B0\u90E8\u7F72\u3002",
-  envConfigured: "Stormkit env configured",
-  envMissing: "Stormkit env missing",
+    "\u8ACB\u5148\u586B\u5165 Contentful Management Token\uff0c\u6216\u5728\u90E8\u7F72\u5E73\u53F0\u8A2D\u5B9A CONTENTFUL_MANAGEMENT_TOKEN \u5F8C\u91CD\u65B0\u90E8\u7F72\u3002",
+  envConfigured: "deployment env configured",
+  envMissing: "deployment env missing",
   localeFallback: "Locale is not enabled in Contentful, so the request used the space default locale."
 };
 
@@ -220,7 +220,7 @@ export default function Home() {
       setResult({
         ok: false,
         message:
-          "請先填入 Contentful Space ID 與 Access Token，或確認 Stormkit environment variables 已設定並重新部署。"
+          "請先填入 Contentful Space ID 與 Access Token，或確認部署平台的 environment variables 已設定並重新部署。"
       });
       setIsTesting(false);
       return;
@@ -365,7 +365,7 @@ export default function Home() {
             <h2 id="settings-title">Contentful &#x53C3;&#x6578;</h2>
             <p>
               &#x8A2D;&#x5B9A;&#x6703;&#x5B58;&#x5728;&#x9019;&#x53F0;&#x700F;&#x89BD;&#x5668;&#x7684; localStorage&#x3002;
-              &#x6B04;&#x4F4D;&#x7559;&#x7A7A;&#x6642;&#xFF0C;server API &#x6703;&#x6539;&#x7528; Stormkit environment variables&#x3002;
+              &#x6B04;&#x4F4D;&#x7559;&#x7A7A;&#x6642;&#xFF0C;server API &#x6703;&#x6539;&#x7528;&#x90E8;&#x7F72;&#x5E73;&#x53F0;&#x7684; environment variables&#x3002;
             </p>
           </div>
           <label class="switch">
@@ -452,14 +452,14 @@ export default function Home() {
               when={config().ok ? (config() as ServerConfigSuccess) : null}
               fallback={
                 <div class="env-summary warning">
-                  <strong>Stormkit env status</strong>
+                  <strong>Deployment env status</strong>
                   <span>{(config() as { ok: false; message: string }).message}</span>
                 </div>
               }
             >
               {(current) => (
                 <div class="env-summary">
-                  <strong>Stormkit env status</strong>
+                  <strong>Deployment env status</strong>
                   <span>Space: {current().values.spaceId || "missing"}</span>
                   <span>Environment: {current().values.environmentId || "master"}</span>
                   <span>Locale: {current().values.locale || "en-US"}</span>
@@ -564,7 +564,7 @@ export default function Home() {
             <div class="empty-state">
               <p>
                 &#x53EF;&#x4F7F;&#x7528;&#x756B;&#x9762;&#x8F38;&#x5165;&#x7684; Management Token&#xFF0C;
-                &#x6216;&#x7559;&#x7A7A;&#x6539;&#x7528; Stormkit &#x7684; CONTENTFUL_MANAGEMENT_TOKEN
+                &#x6216;&#x7559;&#x7A7A;&#x6539;&#x7528;&#x90E8;&#x7F72;&#x5E73;&#x53F0;&#x7684; CONTENTFUL_MANAGEMENT_TOKEN
                 &#x4F86;&#x8F09;&#x5165; Table &#x72C0;&#x614B;&#x3002;
               </p>
             </div>

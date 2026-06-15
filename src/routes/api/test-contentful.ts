@@ -41,8 +41,8 @@ function jsonResponse(body: unknown, status = 200) {
 function contentfulConnectionMessage(status: number, fallback: string, usePreview?: boolean) {
   if (status === 401) {
     return usePreview
-      ? "Contentful Preview Token 無效，或不是這個 Space ID 的 token。請確認 Stormkit 的 CONTENTFUL_PREVIEW_TOKEN 與 CONTENTFUL_SPACE_ID 是同一個 Contentful space。"
-      : "Contentful Delivery Token 無效，或不是這個 Space ID 的 token。請確認 Stormkit 的 CONTENTFUL_DELIVERY_TOKEN 與 CONTENTFUL_SPACE_ID 是同一個 Contentful space。";
+      ? "Contentful Preview Token 無效，或不是這個 Space ID 的 token。請確認 CONTENTFUL_PREVIEW_TOKEN 與 CONTENTFUL_SPACE_ID 是同一個 Contentful space。"
+      : "Contentful Delivery Token 無效，或不是這個 Space ID 的 token。請確認 CONTENTFUL_DELIVERY_TOKEN 與 CONTENTFUL_SPACE_ID 是同一個 Contentful space。";
   }
 
   return fallback;
@@ -160,8 +160,8 @@ export async function POST(event: APIEvent) {
       {
         ok: false,
         message: settings.usePreview
-          ? "Please enter a Preview Access Token or set CONTENTFUL_PREVIEW_TOKEN in Stormkit."
-          : "Please enter a Delivery Access Token or set CONTENTFUL_DELIVERY_TOKEN in Stormkit."
+          ? "Please enter a Preview Access Token or set CONTENTFUL_PREVIEW_TOKEN in the deployment environment."
+          : "Please enter a Delivery Access Token or set CONTENTFUL_DELIVERY_TOKEN in the deployment environment."
       },
       400
     );
