@@ -1,4 +1,7 @@
 import { createEffect, createSignal, For, onMount, Show } from "solid-js";
+import { ContentfulCsvPanel } from "../components/ContentfulCsvPanel";
+import { FengbroCrudWorkspace } from "../components/FengbroCrudWorkspace";
+import { FengbroToolsConsole } from "../components/FengbroToolsConsole";
 
 type ContentfulSettings = {
   spaceId: string;
@@ -10,28 +13,19 @@ type ContentfulSettings = {
   usePreview: boolean;
 };
 
-type TestSuccess = {
-  ok: true;
-  mode: string;
-  spaceId: string;
-  environmentId: string;
-  locale: string;
-  localeFallback: boolean;
-  total: number;
-  itemCount: number;
-  firstEntryTitle: string | null;
-  checkedAt: string;
-};
-
-type TestFailure = {
-  ok: false;
-  message: string;
-  locale?: string;
-  localeFallback?: boolean;
-  status?: number;
-};
-
-type TestResult = TestSuccess | TestFailure;
+type TestResult =
+  | {
+      ok: true;
+      mode: string;
+      spaceId: string;
+      environmentId: string;
+      locale: string;
+      localeFallback: boolean;
+      total: number;
+      itemCount: number;
+      firstEntryTitle: string | null;
+    }
+  | { ok: false; message: string; status?: number };
 
 type TableStatus = {
   id: string;
@@ -44,59 +38,26 @@ type TableStatus = {
   published: boolean;
 };
 
-type TableStatusesResponse =
-  | { ok: true; tables: TableStatus[] }
-  | { ok: false; message: string };
-
 type TableInitializeResult = TableStatus & {
-  action: "created" | "updated" | "skipped";
+  action: "created" | "skipped" | "updated";
 };
-
-type TableInitializeResponse =
-  | { ok: true; results: TableInitializeResult[] }
-  | { ok: false; message: string };
 
 type SecretStatus = {
   configured: boolean;
   displayValue: string;
 };
 
-type ServerConfigSuccess = {
-  ok: true;
-  values: {
-    spaceId: string;
-    environmentId: string;
-    locale: string;
-  };
-  tokens: {
-    delivery: SecretStatus;
-    preview: SecretStatus;
-    management: SecretStatus;
-  };
-};
+type ServerConfigResponse =
+  | {
+      ok: true;
+      values: { spaceId: string; environmentId: string; locale: string };
+      tokens: { delivery: SecretStatus; preview: SecretStatus; management: SecretStatus };
+    }
+  | { ok: false; message: string };
 
-type ServerConfigResponse = ServerConfigSuccess | { ok: false; message: string };
+type ServerConfigSuccess = Extract<ServerConfigResponse, { ok: true }>;
 
 const STORAGE_KEY = "fengbro-contentful-settings";
-
-const text = {
-  saved: "\u5df2\u5132\u5b58",
-  saveSettings: "\u5132\u5b58\u8a2d\u5b9a",
-  testing: "\u6e2c\u8a66\u4e2d...",
-  testConnection: "\u6e2c\u8a66\u9023\u7dda",
-  tableStatus: "\u8F09\u5165 Table \u72C0\u614B",
-  loadingStatus: "\u8F09\u5165\u4E2D...",
-  initAll: "\u521D\u59CB\u5316\u5168\u90E8 Table",
-  initializingAll: "\u521D\u59CB\u5316\u4E2D...",
-  initSingle: "\u521D\u59CB\u5316",
-  clearLocalSettings: "\u6E05\u9664\u672C\u6A5F\u8A2D\u5B9A",
-  unknownError: "\u767C\u751F\u672A\u77E5\u932F\u8AA4",
-  missingMgmtToken:
-    "\u8ACB\u5148\u586B\u5165 Contentful Management Token\uff0c\u6216\u5728\u90E8\u7F72\u5E73\u53F0\u8A2D\u5B9A CONTENTFUL_MANAGEMENT_TOKEN \u5F8C\u91CD\u65B0\u90E8\u7F72\u3002",
-  envConfigured: "deployment env configured",
-  envMissing: "deployment env missing",
-  localeFallback: "Locale is not enabled in Contentful, so the request used the space default locale."
-};
 
 const defaultSettings: ContentfulSettings = {
   spaceId: "",
@@ -110,7 +71,6 @@ const defaultSettings: ContentfulSettings = {
 
 function loadSettings() {
   if (typeof window === "undefined") return defaultSettings;
-
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     return stored ? { ...defaultSettings, ...JSON.parse(stored) } : defaultSettings;
@@ -130,16 +90,18 @@ function tableBadgeClass(status: TableStatus) {
 }
 
 function tokenHint(status?: SecretStatus) {
-  if (!status?.configured) return text.envMissing;
-  return `${text.envConfigured}: ${status.displayValue}`;
+  if (!status?.configured) return "deployment env missing";
+  return `deployment env configured: ${status.displayValue}`;
 }
 
 export default function Home() {
+  return <FengbroToolsConsole />;
+
   const [settings, setSettings] = createSignal<ContentfulSettings>(loadSettings());
   const [serverConfig, setServerConfig] = createSignal<ServerConfigResponse | null>(null);
-  const [isTesting, setIsTesting] = createSignal(false);
   const [isSaved, setIsSaved] = createSignal(false);
-  const [result, setResult] = createSignal<TestResult | null>(null);
+  const [isTesting, setIsTesting] = createSignal(false);
+  const [testResult, setTestResult] = createSignal<TestResult | null>(null);
   const [tables, setTables] = createSignal<TableStatus[]>([]);
   const [tableMessage, setTableMessage] = createSignal<{ ok: boolean; message: string } | null>(null);
   const [isLoadingTables, setIsLoadingTables] = createSignal(false);
@@ -151,7 +113,6 @@ export default function Home() {
       const response = await fetch("/api/contentful-config");
       const payload = (await response.json()) as ServerConfigResponse;
       setServerConfig(payload);
-
       if (payload.ok) {
         setSettings((current) => ({
           ...current,
@@ -163,14 +124,40 @@ export default function Home() {
     } catch (error) {
       setServerConfig({
         ok: false,
-        message: error instanceof Error ? error.message : text.unknownError
+        message: error instanceof Error ? error.message : "Unable to load deployment env status."
       });
     }
   });
 
   createEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings()));
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings()));
+    }
+  });
+
+  const currentServerConfig = (): ServerConfigSuccess | null => {
+    const config = serverConfig();
+    return config?.ok ? config : null;
+  };
+
+  const hasSpaceId = () => settings().spaceId.trim().length > 0 || Boolean(currentServerConfig()?.values.spaceId);
+  const hasManagementToken = () =>
+    settings().managementToken.trim().length > 0 || Boolean(currentServerConfig()?.tokens.management.configured);
+  const canManage = () => hasSpaceId() && hasManagementToken();
+  const activeToken = () => (settings().usePreview ? settings().previewToken : settings().deliveryToken);
+  const hasActiveToken = () => {
+    if (activeToken().trim()) return true;
+    const config = currentServerConfig();
+    return settings().usePreview
+      ? Boolean(config?.tokens.preview.configured)
+      : Boolean(config?.tokens.delivery.configured);
+  };
+
+  const crudSettings = () => ({
+    spaceId: settings().spaceId,
+    environmentId: settings().environmentId,
+    managementToken: settings().managementToken,
+    locale: settings().locale
   });
 
   const updateSetting = <K extends keyof ContentfulSettings>(key: K, value: ContentfulSettings[K]) => {
@@ -181,7 +168,7 @@ export default function Home() {
       setTables([]);
     }
     if (key === "deliveryToken" || key === "previewToken" || key === "spaceId" || key === "environmentId") {
-      setResult(null);
+      setTestResult(null);
     }
   };
 
@@ -204,44 +191,21 @@ export default function Home() {
       environmentId: config?.values.environmentId ?? "master",
       locale: config?.values.locale ?? ""
     });
-    setResult(null);
+    setTestResult(null);
     setTables([]);
     setTableMessage({
       ok: true,
-      message:
-        "Local browser settings cleared. Blank token fields will now use deployment environment variables."
+      message: "Local settings cleared. Blank token fields will use deployment environment variables."
     });
   };
 
-  const currentServerConfig = () => {
-    const config = serverConfig();
-    return config?.ok ? config : null;
-  };
-
-  const hasSpaceId = () => settings().spaceId.trim().length > 0 || Boolean(currentServerConfig()?.values.spaceId);
-  const hasManagementToken = () =>
-    settings().managementToken.trim().length > 0 || Boolean(currentServerConfig()?.tokens.management.configured);
-  const canManageTables = () => hasSpaceId() && hasManagementToken();
-
-  const activeToken = () => (settings().usePreview ? settings().previewToken : settings().deliveryToken);
-  const hasActiveToken = () => {
-    if (activeToken().trim().length > 0) return true;
-    const config = currentServerConfig();
-    return settings().usePreview
-      ? Boolean(config?.tokens.preview.configured)
-      : Boolean(config?.tokens.delivery.configured);
-  };
-  const canTest = () => !isTesting();
-
   const testConnection = async () => {
     setIsTesting(true);
-    setResult(null);
-
+    setTestResult(null);
     if (!hasSpaceId() || !hasActiveToken()) {
-      setResult({
+      setTestResult({
         ok: false,
-        message:
-          "請先填入 Contentful Space ID 與 Access Token，或確認部署平台的 environment variables 已設定並重新部署。"
+        message: "Enter Contentful Space ID and Access Token, or configure deployment environment variables."
       });
       setIsTesting(false);
       return;
@@ -253,12 +217,11 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings())
       });
-      const payload = (await response.json()) as TestResult;
-      setResult(payload);
+      setTestResult((await response.json()) as TestResult);
     } catch (error) {
-      setResult({
+      setTestResult({
         ok: false,
-        message: error instanceof Error ? error.message : text.unknownError
+        message: error instanceof Error ? error.message : "Unable to connect to Contentful."
       });
     } finally {
       setIsTesting(false);
@@ -266,43 +229,34 @@ export default function Home() {
   };
 
   const loadTableStatuses = async () => {
-    if (!canManageTables()) {
-      setTableMessage({ ok: false, message: text.missingMgmtToken });
+    if (!canManage()) {
+      setTableMessage({
+        ok: false,
+        message: "Enter Contentful Space ID and Management Token before loading table status."
+      });
       return;
     }
-
     setIsLoadingTables(true);
     setTableMessage(null);
-
     try {
       const response = await fetch("/api/contentful-tables", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "status",
-          settings: {
-            spaceId: settings().spaceId,
-            environmentId: settings().environmentId,
-            managementToken: settings().managementToken
-          }
-        })
+        body: JSON.stringify({ action: "status", settings: crudSettings() })
       });
-
-      const payload = (await response.json()) as TableStatusesResponse;
+      const payload = (await response.json()) as
+        | { ok: true; tables: TableStatus[] }
+        | { ok: false; message: string };
       if (!payload.ok) {
         setTableMessage({ ok: false, message: payload.message });
         return;
       }
-
       setTables(payload.tables);
-      setTableMessage({
-        ok: true,
-        message: `Loaded ${payload.tables.length} table definitions.`
-      });
+      setTableMessage({ ok: true, message: `Loaded ${payload.tables.length} table definitions.` });
     } catch (error) {
       setTableMessage({
         ok: false,
-        message: error instanceof Error ? error.message : text.unknownError
+        message: error instanceof Error ? error.message : "Unable to load table status."
       });
     } finally {
       setIsLoadingTables(false);
@@ -310,43 +264,31 @@ export default function Home() {
   };
 
   const initializeTables = async (tableName?: string) => {
-    if (!canManageTables()) {
-      setTableMessage({ ok: false, message: text.missingMgmtToken });
+    if (!canManage()) {
+      setTableMessage({
+        ok: false,
+        message: "Enter Contentful Space ID and Management Token before initializing tables."
+      });
       return;
     }
-
-    if (tableName) {
-      setInitializingTableId(tableName);
-    } else {
-      setIsInitializingAll(true);
-    }
+    tableName ? setInitializingTableId(tableName) : setIsInitializingAll(true);
     setTableMessage(null);
-
     try {
       const response = await fetch("/api/contentful-tables", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "initialize",
-          tableName,
-          settings: {
-            spaceId: settings().spaceId,
-            environmentId: settings().environmentId,
-            managementToken: settings().managementToken
-          }
-        })
+        body: JSON.stringify({ action: "initialize", tableName, settings: crudSettings() })
       });
-
-      const payload = (await response.json()) as TableInitializeResponse;
+      const payload = (await response.json()) as
+        | { ok: true; results: TableInitializeResult[] }
+        | { ok: false; message: string };
       if (!payload.ok) {
         setTableMessage({ ok: false, message: payload.message });
         return;
       }
-
       const created = payload.results.filter((item) => item.action === "created").length;
       const updated = payload.results.filter((item) => item.action === "updated").length;
       const skipped = payload.results.filter((item) => item.action === "skipped").length;
-
       setTableMessage({
         ok: true,
         message: `Initialization finished. created=${created}, updated=${updated}, skipped=${skipped}`
@@ -355,7 +297,7 @@ export default function Home() {
     } catch (error) {
       setTableMessage({
         ok: false,
-        message: error instanceof Error ? error.message : text.unknownError
+        message: error instanceof Error ? error.message : "Unable to initialize tables."
       });
     } finally {
       setInitializingTableId(null);
@@ -366,14 +308,12 @@ export default function Home() {
   return (
     <main class="shell">
       <section class="hero">
-        <p class="eyebrow">SolidStart Contentful Tool</p>
         <div class="hero-row">
           <div>
-            <h1>&#x92d2;&#x5144;&#x8a2d;&#x5b9a;</h1>
+            <p class="eyebrow">SolidStart Contentful Tool</p>
+            <h1>FengBro Settings</h1>
             <p class="hero-copy">
-              &#x8A2D;&#x5B9A; Contentful &#x53C3;&#x6578;&#x3001;&#x6E2C;&#x8A66; API
-              &#x9023;&#x7DDA;&#xFF0C;&#x4E26;&#x53C3;&#x8003; fengbroaiappwrite
-              &#x6D41;&#x7A0B;&#x521D;&#x59CB;&#x5316; Table&#x3002;
+              Configure Contentful, test Delivery/Preview access, initialize Appwrite-style tables, and manage CRUD.
             </p>
           </div>
           <div class="status-pill">Contentful</div>
@@ -383,11 +323,8 @@ export default function Home() {
       <section class="panel" aria-labelledby="settings-title">
         <div class="panel-heading">
           <div>
-            <h2 id="settings-title">Contentful &#x53C3;&#x6578;</h2>
-            <p>
-              &#x8A2D;&#x5B9A;&#x6703;&#x5B58;&#x5728;&#x9019;&#x53F0;&#x700F;&#x89BD;&#x5668;&#x7684; localStorage&#x3002;
-              &#x6B04;&#x4F4D;&#x7559;&#x7A7A;&#x6642;&#xFF0C;server API &#x6703;&#x6539;&#x7528;&#x90E8;&#x7F72;&#x5E73;&#x53F0;&#x7684; environment variables&#x3002;
-            </p>
+            <h2 id="settings-title">Contentful Parameters</h2>
+            <p>Blank fields fall back to deployment environment variables on the server.</p>
           </div>
           <label class="switch">
             <input
@@ -395,181 +332,141 @@ export default function Home() {
               checked={settings().usePreview}
               onInput={(event) => updateSetting("usePreview", event.currentTarget.checked)}
             />
-            <span>&#x4F7F;&#x7528; Preview API</span>
+            <span>Use Preview API</span>
           </label>
         </div>
 
         <div class="form-grid">
           <label>
             <span>Space ID</span>
-            <input
-              value={settings().spaceId}
-              onInput={(event) => updateSetting("spaceId", event.currentTarget.value)}
-              placeholder="abc123xyz"
-              autocomplete="off"
-            />
+            <input value={settings().spaceId} onInput={(event) => updateSetting("spaceId", event.currentTarget.value)} />
           </label>
-
           <label>
             <span>Environment ID</span>
             <input
               value={settings().environmentId}
               onInput={(event) => updateSetting("environmentId", event.currentTarget.value)}
-              placeholder="master"
-              autocomplete="off"
             />
           </label>
-
           <label>
             <span>Delivery Access Token</span>
             <input
               type="password"
               value={settings().deliveryToken}
               onInput={(event) => updateSetting("deliveryToken", event.currentTarget.value)}
-              placeholder="Content Delivery API token"
-              autocomplete="off"
             />
             <small class="field-hint">{tokenHint(currentServerConfig()?.tokens.delivery)}</small>
           </label>
-
           <label>
             <span>Preview Access Token</span>
             <input
               type="password"
               value={settings().previewToken}
               onInput={(event) => updateSetting("previewToken", event.currentTarget.value)}
-              placeholder="Content Preview API token"
-              autocomplete="off"
             />
             <small class="field-hint">{tokenHint(currentServerConfig()?.tokens.preview)}</small>
           </label>
-
           <label>
             <span>Management Token</span>
             <input
               type="password"
               value={settings().managementToken}
               onInput={(event) => updateSetting("managementToken", event.currentTarget.value)}
-              placeholder="Content Management API token"
-              autocomplete="off"
             />
             <small class="field-hint">{tokenHint(currentServerConfig()?.tokens.management)}</small>
           </label>
-
           <label>
             <span>Locale</span>
-            <input
-              value={settings().locale}
-              onInput={(event) => updateSetting("locale", event.currentTarget.value)}
-              placeholder="Optional, leave blank for default locale"
-              autocomplete="off"
-            />
+            <input value={settings().locale} onInput={(event) => updateSetting("locale", event.currentTarget.value)} />
           </label>
         </div>
 
         <Show when={serverConfig()}>
-          {(config) => (
-            <Show
-              when={config().ok ? (config() as ServerConfigSuccess) : null}
-              fallback={
-                <div class="env-summary warning">
-                  <strong>Deployment env status</strong>
-                  <span>{(config() as { ok: false; message: string }).message}</span>
-                </div>
-              }
-            >
-              {(current) => (
-                <div class="env-summary">
-                  <strong>Deployment env status</strong>
-                  <span>Space: {current().values.spaceId || "missing"}</span>
-                  <span>Environment: {current().values.environmentId || "master"}</span>
-                  <span>Locale: {current().values.locale || "en-US"}</span>
-                  <span>Management: {tokenHint(current().tokens.management)}</span>
-                </div>
-              )}
-            </Show>
-          )}
+          {(config) => {
+            const current = config();
+            return current.ok ? (
+              <div class="env-summary">
+                <strong>Deployment env status</strong>
+                <span>Space: {current.values.spaceId || "missing"}</span>
+                <span>Environment: {current.values.environmentId || "master"}</span>
+                <span>Locale: {current.values.locale || "en-US"}</span>
+                <span>Management: {tokenHint(current.tokens.management)}</span>
+              </div>
+            ) : (
+              <div class="env-summary warning">
+                <strong>Deployment env status</strong>
+                <span>{current.message}</span>
+              </div>
+            );
+          }}
         </Show>
 
         <div class="actions">
           <button class="secondary" type="button" onClick={clearLocalSettings}>
-            {text.clearLocalSettings}
+            Clear Local Settings
           </button>
           <button class="secondary" type="button" onClick={saveSettings}>
-            {isSaved() ? text.saved : text.saveSettings}
+            {isSaved() ? "Saved" : "Save Settings"}
           </button>
-          <button class="primary" type="button" disabled={!canTest()} onClick={testConnection}>
-            {isTesting() ? text.testing : text.testConnection}
+          <button class="primary" type="button" disabled={isTesting()} onClick={testConnection}>
+            {isTesting() ? "Testing..." : "Test Connection"}
           </button>
         </div>
 
-        <Show when={result()}>
+        <Show when={testResult()}>
           {(current) => {
             const value = current();
-
-            if (!value.ok) {
-              return (
-                <div class={resultClass(false)} role="status">
-                  <strong>&#x9023;&#x7DDA;&#x5931;&#x6557;</strong>
-                  <p>{value.message}</p>
-                  <Show when={value.status}>
-                    <small>HTTP status: {value.status}</small>
-                  </Show>
-                </div>
-              );
-            }
-
-            return (
+            return value.ok ? (
               <div class={resultClass(true)} role="status">
-                <strong>&#x9023;&#x7DDA;&#x6210;&#x529F;</strong>
+                <strong>Connection succeeded</strong>
                 <p>
-                  {value.mode} API &#x5DF2;&#x9023;&#x4E0A; {value.spaceId}/{value.environmentId}
-                  &#xFF0C;&#x5171;&#x627E;&#x5230; {value.total} &#x7B46;&#x9805;&#x76EE;&#x3002;
+                  {value.mode} API connected to {value.spaceId}/{value.environmentId}; found {value.total} entries.
                 </p>
                 <Show when={value.localeFallback}>
-                  <p class="notice">{text.localeFallback}</p>
+                  <p class="notice">Locale fallback was used because the requested locale is not enabled.</p>
                 </Show>
                 <small>
-                  Locale: {value.locale}
-                  {" · "}
-                  &#x9019;&#x6B21;&#x56DE;&#x50B3; {value.itemCount} &#x7B46;
-                  <Show when={value.firstEntryTitle}>
-                    &#xFF0C;&#x7B2C;&#x4E00;&#x7B46;&#xFF1A;{value.firstEntryTitle}
-                  </Show>
+                  Locale: {value.locale}; returned {value.itemCount} entries
+                  <Show when={value.firstEntryTitle}>; first entry: {value.firstEntryTitle}</Show>
                 </small>
+              </div>
+            ) : (
+              <div class={resultClass(false)} role="status">
+                <strong>Connection failed</strong>
+                <p>{value.message}</p>
+                <Show when={value.status}>
+                  <small>HTTP status: {value.status}</small>
+                </Show>
               </div>
             );
           }}
         </Show>
       </section>
 
+      <FengbroCrudWorkspace canManage={canManage()} settings={crudSettings()} />
+
+      <section class="panel" aria-labelledby="csv-title">
+        <div class="panel-heading">
+          <div>
+            <h2 id="csv-title">CSV Import / Export</h2>
+            <p>Batch import or export Contentful entries using the Appwrite-compatible table schema.</p>
+          </div>
+        </div>
+        <ContentfulCsvPanel canManage={canManage()} settings={crudSettings()} />
+      </section>
+
       <section class="panel table-panel" aria-labelledby="table-init-title">
         <div class="panel-heading">
           <div>
             <h2 id="table-init-title">Table Initialization</h2>
-            <p>
-              &#x53C3;&#x8003; fengbroaiappwrite &#x7684; create-table
-              &#x6982;&#x5FF5;&#xFF0C;&#x53EF;&#x6AA2;&#x67E5; Contentful content type
-              &#x72C0;&#x614B;&#x4E26;&#x521D;&#x59CB;&#x5316;&#x5305;&#x542B; CronContentful &#x5728;&#x5167;&#x7684;
-              table schema&#x3002;
-            </p>
+            <p>Check Contentful content type status and initialize all FengBro table schemas.</p>
           </div>
           <div class="toolbar">
-            <button
-              class="secondary"
-              type="button"
-              disabled={isLoadingTables()}
-              onClick={loadTableStatuses}
-            >
-              {isLoadingTables() ? text.loadingStatus : text.tableStatus}
+            <button class="secondary" type="button" disabled={isLoadingTables()} onClick={loadTableStatuses}>
+              {isLoadingTables() ? "Loading..." : "Load Table Status"}
             </button>
-            <button
-              class="primary"
-              type="button"
-              disabled={isInitializingAll()}
-              onClick={() => initializeTables()}
-            >
-              {isInitializingAll() ? text.initializingAll : text.initAll}
+            <button class="primary" type="button" disabled={isInitializingAll()} onClick={() => initializeTables()}>
+              {isInitializingAll() ? "Initializing..." : "Initialize All Tables"}
             </button>
           </div>
         </div>
@@ -584,15 +481,7 @@ export default function Home() {
 
         <Show
           when={tables().length > 0}
-          fallback={
-            <div class="empty-state">
-              <p>
-                &#x53EF;&#x4F7F;&#x7528;&#x756B;&#x9762;&#x8F38;&#x5165;&#x7684; Management Token&#xFF0C;
-                &#x6216;&#x7559;&#x7A7A;&#x6539;&#x7528;&#x90E8;&#x7F72;&#x5E73;&#x53F0;&#x7684; CONTENTFUL_MANAGEMENT_TOKEN
-                &#x4F86;&#x8F09;&#x5165; Table &#x72C0;&#x614B;&#x3002;
-              </p>
-            </div>
-          }
+          fallback={<div class="empty-state">Use the Management Token above, or deployment env vars, to load table status.</div>}
         >
           <div class="table-list">
             <For each={tables()}>
@@ -605,25 +494,20 @@ export default function Home() {
                     </div>
                     <span class={tableBadgeClass(table)}>
                       {table.exists
-                        ? table.conflictFields.length > 0 || table.missingFields.length > 0
+                        ? table.conflictFields.length || table.missingFields.length
                           ? "Needs sync"
                           : "Ready"
                         : "Missing"}
                     </span>
                   </div>
-
                   <div class="table-meta">
                     <span>expected {table.expectedFields}</span>
                     <span>actual {table.actualFields}</span>
                     <span>{table.published ? "published" : "draft"}</span>
                   </div>
-
                   <Show when={table.missingFields.length > 0}>
-                    <p class="table-notes">
-                      missing: {table.missingFields.join(", ")}
-                    </p>
+                    <p class="table-notes">missing: {table.missingFields.join(", ")}</p>
                   </Show>
-
                   <Show when={table.conflictFields.length > 0}>
                     <p class="table-notes">
                       conflict:{" "}
@@ -632,7 +516,6 @@ export default function Home() {
                         .join(", ")}
                     </p>
                   </Show>
-
                   <div class="table-card-actions">
                     <button
                       class="secondary"
@@ -640,7 +523,7 @@ export default function Home() {
                       disabled={initializingTableId() === table.id}
                       onClick={() => initializeTables(table.id)}
                     >
-                      {initializingTableId() === table.id ? text.initializingAll : text.initSingle}
+                      {initializingTableId() === table.id ? "Initializing..." : "Initialize"}
                     </button>
                   </div>
                 </article>

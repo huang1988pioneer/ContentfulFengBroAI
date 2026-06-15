@@ -1,6 +1,8 @@
 import type { APIEvent } from "@solidjs/start/server";
 import {
+  exportContentfulCsv,
   getContentfulTableStatuses,
+  importContentfulCsv,
   initializeContentfulTables
 } from "../../lib/contentful-management";
 
@@ -113,7 +115,7 @@ export async function POST(event: APIEvent) {
 
   try {
     const body = await event.request.json();
-    const action = body.action as "status" | "initialize";
+    const action = body.action as "exportCsv" | "importCsv" | "initialize" | "status";
     const settings = body.settings ?? {};
     context = {
       environmentId: String(settings.environmentId ?? "").trim() || "master",
@@ -129,6 +131,16 @@ export async function POST(event: APIEvent) {
     if (action === "initialize") {
       const results = await initializeContentfulTables(settings, body.tableName);
       return jsonResponse({ ok: true, results });
+    }
+
+    if (action === "importCsv") {
+      const result = await importContentfulCsv(settings, body.tableName, String(body.csvText ?? ""));
+      return jsonResponse({ ok: true, ...result });
+    }
+
+    if (action === "exportCsv") {
+      const result = await exportContentfulCsv(settings, body.tableName);
+      return jsonResponse({ ok: true, ...result });
     }
 
     return jsonResponse({ ok: false, message: "Unknown action" }, 400);

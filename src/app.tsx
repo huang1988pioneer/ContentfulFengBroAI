@@ -9,7 +9,7 @@ export default function App() {
     <Router
       root={(props) => (
         <MetaProvider>
-          <Title>{"\u92d2\u5144\u8a2d\u5b9a | Contentful"}</Title>
+          <Title>{"鋒兄工具 | FengBro AI"}</Title>
           <Suspense>{props.children}</Suspense>
         </MetaProvider>
       )}

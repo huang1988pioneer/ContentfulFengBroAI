@@ -11,9 +11,25 @@ type ContentfulSettings = {
 };
 
 type ContentfulPayload = {
+  includes?: {
+    Asset?: unknown[];
+  };
   items?: unknown[];
   message?: string;
   total?: number;
+};
+
+type MediaKind = "image" | "video" | "music" | "commondocument" | "podcast";
+
+type MediaPreviewItem = {
+  id: string;
+  kind: MediaKind;
+  title: string;
+  fileUrl: string | null;
+  fileType: string | null;
+  coverUrl: string | null;
+  note: string | null;
+  category: string | null;
 };
 
 type ContentfulFetchResult =
@@ -49,20 +65,61 @@ function contentfulConnectionMessage(status: number, fallback: string, usePrevie
 }
 
 function entryTitle(entry: unknown) {
+  const fields = entryFields(entry);
+  if (!fields) return null;
+
+  for (const key of ["title", "name", "displayName", "slug"]) {
+    const value = fieldValue(fields[key]);
+    if (typeof value === "string") return value;
+  }
+
+  return null;
+}
+
+function entryFields(entry: unknown) {
   if (!entry || typeof entry !== "object" || !("fields" in entry)) return null;
 
   const fields = (entry as { fields?: Record<string, unknown> }).fields;
   if (!fields) return null;
 
-  for (const key of ["title", "name", "displayName", "slug"]) {
-    const value = fields[key];
-    if (typeof value === "string") return value;
-    if (value && typeof value === "object") {
-      const localized = Object.values(value).find((item) => typeof item === "string");
-      if (typeof localized === "string") return localized;
-    }
+  return fields;
+}
+
+function fieldValue(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+
+  const objectValue = value as Record<string, unknown>;
+  if ("fields" in objectValue || "sys" in objectValue) return value;
+
+  const localized = Object.values(objectValue).find((item) => item !== undefined && item !== null);
+  return localized ?? value;
+}
+
+function stringField(fields: Record<string, unknown>, key: string) {
+  const value = fieldValue(fields[key]);
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function assetUrl(value: unknown, assetsById = new Map<string, unknown>()): string | null {
+  const normalized = fieldValue(value);
+  if (!normalized || typeof normalized !== "object") {
+    return typeof normalized === "string" ? normalized : null;
   }
 
+  const linkedId = (normalized as { sys?: { id?: string; type?: string } }).sys?.id;
+  const asset = linkedId ? assetsById.get(linkedId) ?? normalized : normalized;
+  const fields = (asset as { fields?: Record<string, unknown> }).fields;
+  const file = fieldValue(fields?.file);
+  if (!file || typeof file !== "object") return null;
+
+  const url = fieldValue((file as Record<string, unknown>).url);
+  return typeof url === "string" ? url : null;
+}
+
+function normalizeMediaUrl(value: string | null) {
+  if (!value) return null;
+  if (value.startsWith("//")) return `https:${value}`;
+  if (/^https?:\/\//i.test(value)) return value;
   return null;
 }
 
@@ -141,6 +198,72 @@ async function fetchContentfulEntries(options: {
   };
 }
 
+async function fetchMediaPreviews(options: {
+  environmentId: string;
+  host: string;
+  locale: string;
+  localeFallback: boolean;
+  spaceId: string;
+  token: string;
+}) {
+  const mediaTypes: MediaKind[] = ["image", "video", "music", "commondocument", "podcast"];
+
+  const requests = mediaTypes.map(async (kind) => {
+    const url = new URL(
+      `https://${options.host}/spaces/${encodeURIComponent(options.spaceId)}/environments/${encodeURIComponent(options.environmentId)}/entries`
+    );
+    url.searchParams.set("content_type", kind);
+    url.searchParams.set("limit", "3");
+    url.searchParams.set("include", "2");
+
+    if (options.locale && !options.localeFallback) {
+      url.searchParams.set("locale", options.locale);
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${options.token}`
+      }
+    });
+
+    if (!response.ok) return [];
+
+    const payload = (await response.json().catch(() => ({}))) as ContentfulPayload;
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    const assetsById = new Map(
+      (payload.includes?.Asset ?? [])
+        .map((asset) => {
+          const id = asset && typeof asset === "object" ? (asset as { sys?: { id?: string } }).sys?.id : undefined;
+          return id ? ([id, asset] as const) : null;
+        })
+        .filter((asset): asset is readonly [string, unknown] => Boolean(asset))
+    );
+
+    return items.map((item): MediaPreviewItem | null => {
+      const fields = entryFields(item);
+      const sys = item && typeof item === "object" ? (item as { sys?: { id?: string } }).sys : undefined;
+      if (!fields) return null;
+
+      const fileUrl = normalizeMediaUrl(stringField(fields, "file") ?? assetUrl(fields.file, assetsById));
+      const coverUrl = normalizeMediaUrl(stringField(fields, "cover") ?? assetUrl(fields.cover, assetsById));
+
+      return {
+        id: sys?.id ?? `${kind}-${Math.random().toString(36).slice(2)}`,
+        kind,
+        title: entryTitle(item) ?? kind,
+        fileUrl,
+        fileType: stringField(fields, "filetype"),
+        coverUrl,
+        note: stringField(fields, "note"),
+        category: stringField(fields, "category")
+      };
+    }).filter((item): item is MediaPreviewItem => Boolean(item));
+  });
+
+  const results = await Promise.all(requests);
+  return results.flat();
+}
+
 export async function POST(event: APIEvent) {
   const settings = (await event.request.json()) as ContentfulSettings;
   const env = getContentfulEnv({ allowMissingTokens: true });
@@ -196,6 +319,14 @@ export async function POST(event: APIEvent) {
     }
 
     const firstEntry = Array.isArray(result.payload.items) ? result.payload.items[0] : null;
+    const mediaPreviews = await fetchMediaPreviews({
+      environmentId,
+      host,
+      locale: result.locale,
+      localeFallback: result.localeFallback,
+      spaceId,
+      token
+    });
 
     return jsonResponse({
       ok: true,
@@ -207,6 +338,7 @@ export async function POST(event: APIEvent) {
       total: Number(result.payload.total ?? 0),
       itemCount: Array.isArray(result.payload.items) ? result.payload.items.length : 0,
       firstEntryTitle: entryTitle(firstEntry),
+      mediaPreviews,
       checkedAt: new Date().toISOString()
     });
   } catch (error) {

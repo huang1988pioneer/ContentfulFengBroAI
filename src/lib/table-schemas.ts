@@ -210,6 +210,52 @@ export const TABLE_SCHEMAS = {
       { key: "snapshotDate", type: "datetime", required: true }
     ]
   },
+  toolpricehistory: {
+    name: "toolpricehistory",
+    title: "Tool Price History",
+    description: "FengBro price comparison snapshots for general products.",
+    attributes: [
+      { key: "name", type: "string", size: 200, required: true },
+      { key: "source", type: "string", size: 80 },
+      { key: "sourceUrl", type: "url" },
+      { key: "currentPrice", type: "integer" },
+      { key: "suggestedPrice", type: "integer" },
+      { key: "currency", type: "string", size: 20 },
+      { key: "snapshotDate", type: "datetime" },
+      { key: "note", type: "string", size: 500 }
+    ]
+  },
+  fengbrotube: {
+    name: "fengbrotube",
+    title: "FengBro Tube",
+    description: "FengBro Tube channels, video links, and publishing notes.",
+    attributes: [
+      { key: "name", type: "string", size: 200, required: true },
+      { key: "channel", type: "string", size: 160 },
+      { key: "videoId", type: "string", size: 120 },
+      { key: "sourceUrl", type: "url" },
+      { key: "category", type: "string", size: 100 },
+      { key: "publishedAt", type: "datetime" },
+      { key: "note", type: "string", size: 1000 },
+      { key: "enabled", type: "boolean", default: true }
+    ]
+  },
+  fengbrofinance: {
+    name: "fengbrofinance",
+    title: "FengBro Finance",
+    description: "FengBro finance watchlist records and market snapshots.",
+    attributes: [
+      { key: "name", type: "string", size: 160, required: true },
+      { key: "symbol", type: "string", size: 40 },
+      { key: "market", type: "string", size: 80 },
+      { key: "sourceUrl", type: "url" },
+      { key: "price", type: "integer" },
+      { key: "currency", type: "string", size: 20 },
+      { key: "lastUpdatedAt", type: "datetime" },
+      { key: "note", type: "string", size: 1000 },
+      { key: "enabled", type: "boolean", default: true }
+    ]
+  },
   croncontentful: {
     name: "croncontentful",
     title: "Cron Contentful",
@@ -230,4 +276,4 @@ export const TABLE_SCHEMAS = {
   }
 } satisfies Record<string, TableSchema>;
 
-export const TABLE_SCHEMA_LIST = Object.values(TABLE_SCHEMAS);
+export const TABLE_SCHEMA_LIST: TableSchema[] = Object.values(TABLE_SCHEMAS);
