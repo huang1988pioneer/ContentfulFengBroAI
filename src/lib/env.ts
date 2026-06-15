@@ -1,4 +1,5 @@
 type ContentfulEnvOptions = {
+  allowMissingSpace?: boolean;
   allowMissingTokens?: boolean;
   preview?: boolean;
 };
@@ -22,10 +23,12 @@ export function getContentfulEnv(options: ContentfulEnvOptions = {}): Contentful
     locale: process.env.CONTENTFUL_LOCALE ?? "en-US"
   };
 
-  const missing = [
-    ["CONTENTFUL_SPACE_ID", env.spaceId],
-    ["CONTENTFUL_ENVIRONMENT_ID", env.environmentId]
-  ].filter(([, value]) => !value);
+  const missing = options.allowMissingSpace
+    ? []
+    : [
+        ["CONTENTFUL_SPACE_ID", env.spaceId],
+        ["CONTENTFUL_ENVIRONMENT_ID", env.environmentId]
+      ].filter(([, value]) => !value);
 
   if (!options.allowMissingTokens) {
     missing.push(

@@ -1,4 +1,5 @@
 import type { APIEvent } from "@solidjs/start/server";
+import { getContentfulEnv } from "../../lib/env";
 
 type ContentfulSettings = {
   spaceId?: string;
@@ -36,9 +37,13 @@ function entryTitle(entry: unknown) {
 
 export async function POST(event: APIEvent) {
   const settings = (await event.request.json()) as ContentfulSettings;
-  const spaceId = settings.spaceId?.trim();
-  const environmentId = settings.environmentId?.trim() || "master";
-  const token = settings.usePreview ? settings.previewToken?.trim() : settings.deliveryToken?.trim();
+  const env = getContentfulEnv({ allowMissingTokens: true });
+  const spaceId = settings.spaceId?.trim() || env.spaceId;
+  const environmentId = settings.environmentId?.trim() || env.environmentId;
+  const token = settings.usePreview
+    ? settings.previewToken?.trim() || env.previewToken
+    : settings.deliveryToken?.trim() || env.deliveryToken;
+  const locale = settings.locale?.trim() || env.locale;
 
   if (!spaceId) {
     return jsonResponse({ ok: false, message: "Please enter a Contentful Space ID." }, 400);
@@ -49,8 +54,8 @@ export async function POST(event: APIEvent) {
       {
         ok: false,
         message: settings.usePreview
-          ? "Please enter a Preview Access Token."
-          : "Please enter a Delivery Access Token."
+          ? "Please enter a Preview Access Token or set CONTENTFUL_PREVIEW_TOKEN in Stormkit."
+          : "Please enter a Delivery Access Token or set CONTENTFUL_DELIVERY_TOKEN in Stormkit."
       },
       400
     );
@@ -61,8 +66,8 @@ export async function POST(event: APIEvent) {
   url.searchParams.set("access_token", token);
   url.searchParams.set("limit", "1");
 
-  if (settings.locale?.trim()) {
-    url.searchParams.set("locale", settings.locale.trim());
+  if (locale) {
+    url.searchParams.set("locale", locale);
   }
 
   try {

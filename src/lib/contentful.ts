@@ -23,7 +23,7 @@ export function createContentfulPreviewClient() {
 }
 
 export function getContentfulConfigStatus() {
-  const env = getContentfulEnv({ allowMissingTokens: true });
+  const env = getContentfulEnv({ allowMissingSpace: true, allowMissingTokens: true });
 
   return [
     {

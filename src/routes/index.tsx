@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, onMount, Show } from "solid-js";
 
 type ContentfulSettings = {
   spaceId: string;
@@ -52,6 +52,27 @@ type TableInitializeResponse =
   | { ok: true; results: TableInitializeResult[] }
   | { ok: false; message: string };
 
+type SecretStatus = {
+  configured: boolean;
+  displayValue: string;
+};
+
+type ServerConfigSuccess = {
+  ok: true;
+  values: {
+    spaceId: string;
+    environmentId: string;
+    locale: string;
+  };
+  tokens: {
+    delivery: SecretStatus;
+    preview: SecretStatus;
+    management: SecretStatus;
+  };
+};
+
+type ServerConfigResponse = ServerConfigSuccess | { ok: false; message: string };
+
 const STORAGE_KEY = "fengbro-contentful-settings";
 
 const text = {
@@ -66,7 +87,9 @@ const text = {
   initSingle: "\u521D\u59CB\u5316",
   unknownError: "\u767C\u751F\u672A\u77E5\u932F\u8AA4",
   missingMgmtToken:
-    "\u8ACB\u5148\u586B\u5165 Contentful Management Token\uff0c\u624D\u80FD\u8F09\u5165\u6216\u521D\u59CB\u5316 Table\u3002"
+    "\u8ACB\u5148\u586B\u5165 Contentful Management Token\uff0c\u6216\u5728 Stormkit \u8A2D\u5B9A CONTENTFUL_MANAGEMENT_TOKEN \u5F8C\u91CD\u65B0\u90E8\u7F72\u3002",
+  envConfigured: "Stormkit env configured",
+  envMissing: "Stormkit env missing"
 };
 
 const defaultSettings: ContentfulSettings = {
@@ -100,8 +123,14 @@ function tableBadgeClass(status: TableStatus) {
   return "badge success";
 }
 
+function tokenHint(status?: SecretStatus) {
+  if (!status?.configured) return text.envMissing;
+  return `${text.envConfigured}: ${status.displayValue}`;
+}
+
 export default function Home() {
   const [settings, setSettings] = createSignal<ContentfulSettings>(loadSettings());
+  const [serverConfig, setServerConfig] = createSignal<ServerConfigResponse | null>(null);
   const [isTesting, setIsTesting] = createSignal(false);
   const [isSaved, setIsSaved] = createSignal(false);
   const [result, setResult] = createSignal<TestResult | null>(null);
@@ -110,6 +139,28 @@ export default function Home() {
   const [isLoadingTables, setIsLoadingTables] = createSignal(false);
   const [isInitializingAll, setIsInitializingAll] = createSignal(false);
   const [initializingTableId, setInitializingTableId] = createSignal<string | null>(null);
+
+  onMount(async () => {
+    try {
+      const response = await fetch("/api/contentful-config");
+      const payload = (await response.json()) as ServerConfigResponse;
+      setServerConfig(payload);
+
+      if (payload.ok) {
+        setSettings((current) => ({
+          ...current,
+          spaceId: current.spaceId.trim() ? current.spaceId : payload.values.spaceId,
+          environmentId: current.environmentId.trim() ? current.environmentId : payload.values.environmentId,
+          locale: current.locale.trim() ? current.locale : payload.values.locale
+        }));
+      }
+    } catch (error) {
+      setServerConfig({
+        ok: false,
+        message: error instanceof Error ? error.message : text.unknownError
+      });
+    }
+  });
 
   createEffect(() => {
     if (typeof window === "undefined") return;
@@ -136,11 +187,25 @@ export default function Home() {
     window.setTimeout(() => setIsSaved(false), 1800);
   };
 
-  const canManageTables = () =>
-    settings().spaceId.trim().length > 0 && settings().managementToken.trim().length > 0;
+  const currentServerConfig = () => {
+    const config = serverConfig();
+    return config?.ok ? config : null;
+  };
+
+  const hasSpaceId = () => settings().spaceId.trim().length > 0 || Boolean(currentServerConfig()?.values.spaceId);
+  const hasManagementToken = () =>
+    settings().managementToken.trim().length > 0 || Boolean(currentServerConfig()?.tokens.management.configured);
+  const canManageTables = () => hasSpaceId() && hasManagementToken();
 
   const activeToken = () => (settings().usePreview ? settings().previewToken : settings().deliveryToken);
-  const canTest = () => settings().spaceId.trim().length > 0 && activeToken().trim().length > 0 && !isTesting();
+  const hasActiveToken = () => {
+    if (activeToken().trim().length > 0) return true;
+    const config = currentServerConfig();
+    return settings().usePreview
+      ? Boolean(config?.tokens.preview.configured)
+      : Boolean(config?.tokens.delivery.configured);
+  };
+  const canTest = () => hasSpaceId() && hasActiveToken() && !isTesting();
 
   const testConnection = async () => {
     setIsTesting(true);
@@ -285,7 +350,7 @@ export default function Home() {
             <h2 id="settings-title">Contentful &#x53C3;&#x6578;</h2>
             <p>
               &#x8A2D;&#x5B9A;&#x6703;&#x5B58;&#x5728;&#x9019;&#x53F0;&#x700F;&#x89BD;&#x5668;&#x7684; localStorage&#x3002;
-              Table &#x521D;&#x59CB;&#x5316;&#x9700;&#x8981; Management Token&#x3002;
+              &#x6B04;&#x4F4D;&#x7559;&#x7A7A;&#x6642;&#xFF0C;server API &#x6703;&#x6539;&#x7528; Stormkit environment variables&#x3002;
             </p>
           </div>
           <label class="switch">
@@ -328,6 +393,7 @@ export default function Home() {
               placeholder="Content Delivery API token"
               autocomplete="off"
             />
+            <small class="field-hint">{tokenHint(currentServerConfig()?.tokens.delivery)}</small>
           </label>
 
           <label>
@@ -339,6 +405,7 @@ export default function Home() {
               placeholder="Content Preview API token"
               autocomplete="off"
             />
+            <small class="field-hint">{tokenHint(currentServerConfig()?.tokens.preview)}</small>
           </label>
 
           <label>
@@ -350,6 +417,7 @@ export default function Home() {
               placeholder="Content Management API token"
               autocomplete="off"
             />
+            <small class="field-hint">{tokenHint(currentServerConfig()?.tokens.management)}</small>
           </label>
 
           <label>
@@ -362,6 +430,30 @@ export default function Home() {
             />
           </label>
         </div>
+
+        <Show when={serverConfig()}>
+          {(config) => (
+            <Show
+              when={config().ok ? (config() as ServerConfigSuccess) : null}
+              fallback={
+                <div class="env-summary warning">
+                  <strong>Stormkit env status</strong>
+                  <span>{(config() as { ok: false; message: string }).message}</span>
+                </div>
+              }
+            >
+              {(current) => (
+                <div class="env-summary">
+                  <strong>Stormkit env status</strong>
+                  <span>Space: {current().values.spaceId || "missing"}</span>
+                  <span>Environment: {current().values.environmentId || "master"}</span>
+                  <span>Locale: {current().values.locale || "en-US"}</span>
+                  <span>Management: {tokenHint(current().tokens.management)}</span>
+                </div>
+              )}
+            </Show>
+          )}
+        </Show>
 
         <div class="actions">
           <button class="secondary" type="button" onClick={saveSettings}>
@@ -451,9 +543,9 @@ export default function Home() {
           fallback={
             <div class="empty-state">
               <p>
-                &#x8ACB;&#x586B;&#x5165; Management Token
-                &#x5F8C;&#x9EDE;&#x64CA;&#x300C;&#x8F09;&#x5165; Table
-                &#x72C0;&#x614B;&#x300D;&#x3002;
+                &#x53EF;&#x4F7F;&#x7528;&#x756B;&#x9762;&#x8F38;&#x5165;&#x7684; Management Token&#xFF0C;
+                &#x6216;&#x7559;&#x7A7A;&#x6539;&#x7528; Stormkit &#x7684; CONTENTFUL_MANAGEMENT_TOKEN
+                &#x4F86;&#x8F09;&#x5165; Table &#x72C0;&#x614B;&#x3002;
               </p>
             </div>
           }
