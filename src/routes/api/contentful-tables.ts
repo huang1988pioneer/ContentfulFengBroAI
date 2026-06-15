@@ -4,6 +4,12 @@ import {
   initializeContentfulTables
 } from "../../lib/contentful-management";
 
+type RequestContext = {
+  environmentId: string;
+  hasPageToken: boolean;
+  spaceId: string;
+};
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body, null, 2), {
     status,
@@ -11,16 +17,22 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-function contentfulErrorResponse(error: unknown) {
+function contentfulErrorResponse(error: unknown, context: RequestContext) {
   const raw = error instanceof Error ? error.message : String(error);
   const status = getErrorStatus(error, raw);
+  const tokenSource = context.hasPageToken
+    ? "the token entered on this page"
+    : "CONTENTFUL_MANAGEMENT_TOKEN from the deployment environment";
+  const target = `${context.spaceId || "missing-space"}/${context.environmentId || "master"}`;
 
   if (status === 401 || raw.includes("Access token invalid")) {
     return jsonResponse(
       {
         ok: false,
         message:
-          "Contentful Management Token 無效。請確認 Stormkit 的 CONTENTFUL_MANAGEMENT_TOKEN 是 Content Management API token（CMA token），不是 Delivery/Preview token，更新後重新部署。"
+          `Contentful rejected ${tokenSource} for ${target}. ` +
+          "Confirm it is a Content Management API token (CMA token) with access to this Space, not a Delivery/Preview token. " +
+          `Contentful said: ${raw}`
       },
       401
     );
@@ -31,7 +43,7 @@ function contentfulErrorResponse(error: unknown) {
       {
         ok: false,
         message:
-          "缺少 CONTENTFUL_SPACE_ID 或 CONTENTFUL_MANAGEMENT_TOKEN。請在畫面填入，或在 Stormkit Environment variables 設定後重新部署。"
+          "Missing Contentful Space ID or Management Token. Enter them on this page, or set CONTENTFUL_SPACE_ID and CONTENTFUL_MANAGEMENT_TOKEN in the deployment environment and redeploy."
       },
       400
     );
@@ -59,10 +71,21 @@ function getErrorStatus(error: unknown, raw: string) {
 }
 
 export async function POST(event: APIEvent) {
+  let context: RequestContext = {
+    environmentId: "master",
+    hasPageToken: false,
+    spaceId: ""
+  };
+
   try {
     const body = await event.request.json();
     const action = body.action as "status" | "initialize";
     const settings = body.settings ?? {};
+    context = {
+      environmentId: String(settings.environmentId ?? "").trim() || "master",
+      hasPageToken: Boolean(String(settings.managementToken ?? "").trim()),
+      spaceId: String(settings.spaceId ?? "").trim()
+    };
 
     if (action === "status") {
       const tables = await getContentfulTableStatuses(settings);
@@ -76,6 +99,6 @@ export async function POST(event: APIEvent) {
 
     return jsonResponse({ ok: false, message: "Unknown action" }, 400);
   } catch (error) {
-    return contentfulErrorResponse(error);
+    return contentfulErrorResponse(error, context);
   }
 }
