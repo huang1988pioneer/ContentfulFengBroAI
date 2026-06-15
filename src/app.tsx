@@ -9,7 +9,7 @@ export default function App() {
     <Router
       root={(props) => (
         <MetaProvider>
-          <Title>鋒兄設定 | Contentful</Title>
+          <Title>{"\u92d2\u5144\u8a2d\u5b9a | Contentful"}</Title>
           <Suspense>{props.children}</Suspense>
         </MetaProvider>
       )}
