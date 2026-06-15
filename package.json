@@ -1,0 +1,25 @@
+{
+  "name": "contentful-feng-bro-ai",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vinxi dev",
+    "build": "vinxi build",
+    "start": "vinxi start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@solidjs/meta": "^0.29.4",
+    "@solidjs/router": "^0.15.3",
+    "@solidjs/start": "^1.1.2",
+    "contentful": "^11.7.13",
+    "contentful-management": "^12.5.1",
+    "solid-js": "^1.9.9",
+    "vinxi": "^0.5.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

@@ -1,0 +1,207 @@
+export type TableAttributeType = "string" | "integer" | "url" | "datetime" | "boolean";
+
+export type TableAttribute = {
+  key: string;
+  type: TableAttributeType;
+  size?: number;
+  required?: boolean;
+  default?: boolean;
+};
+
+export type TableSchema = {
+  name: string;
+  title: string;
+  description: string;
+  attributes: TableAttribute[];
+};
+
+export const TABLE_SCHEMAS = {
+  commonaccount: {
+    name: "commonaccount",
+    title: "Common Account",
+    description: "Shared account records from the FengBro Appwrite table design.",
+    attributes: [
+      { key: "name", type: "string", size: 100, required: true },
+      ...Array.from({ length: 37 }, (_, index) => ({
+        key: `site${(index + 1).toString().padStart(2, "0")}`,
+        type: "string" as const,
+        size: 100
+      })),
+      ...Array.from({ length: 37 }, (_, index) => ({
+        key: `note${(index + 1).toString().padStart(2, "0")}`,
+        type: "string" as const,
+        size: 100
+      }))
+    ]
+  },
+  bank: {
+    name: "bank",
+    title: "Bank",
+    description: "Bank account and transfer information.",
+    attributes: [
+      { key: "name", type: "string", size: 100, required: true },
+      { key: "deposit", type: "integer" },
+      { key: "site", type: "url" },
+      { key: "address", type: "string", size: 100 },
+      { key: "withdrawals", type: "integer" },
+      { key: "transfer", type: "integer" },
+      { key: "activity", type: "url" },
+      { key: "card", type: "string", size: 100 },
+      { key: "account", type: "string", size: 100 }
+    ]
+  },
+  article: {
+    name: "article",
+    title: "Article",
+    description: "Article, notes, references, links, and attached file metadata.",
+    attributes: [
+      { key: "title", type: "string", size: 100 },
+      { key: "content", type: "string", size: 3377 },
+      { key: "category", type: "string", size: 100 },
+      { key: "ref", type: "string", size: 100 },
+      { key: "newDate", type: "datetime" },
+      { key: "url1", type: "url" },
+      { key: "url2", type: "url" },
+      { key: "url3", type: "url" },
+      { key: "file1", type: "string", size: 150 },
+      { key: "file1name", type: "string", size: 100 },
+      { key: "file1type", type: "string", size: 20 },
+      { key: "file2", type: "string", size: 150 },
+      { key: "file2name", type: "string", size: 100 },
+      { key: "file2type", type: "string", size: 20 },
+      { key: "file3", type: "string", size: 150 },
+      { key: "file3name", type: "string", size: 100 },
+      { key: "file3type", type: "string", size: 20 }
+    ]
+  },
+  food: {
+    name: "food",
+    title: "Food",
+    description: "Food inventory records.",
+    attributes: [
+      { key: "name", type: "string", size: 100, required: true },
+      { key: "amount", type: "integer" },
+      { key: "price", type: "integer" },
+      { key: "shop", type: "string", size: 100 },
+      { key: "todate", type: "datetime" },
+      { key: "photo", type: "url" },
+      { key: "photohash", type: "string", size: 256 }
+    ]
+  },
+  subscription: {
+    name: "subscription",
+    title: "Subscription",
+    description: "Subscription and renewal tracking.",
+    attributes: [
+      { key: "name", type: "string", size: 100, required: true },
+      { key: "site", type: "url" },
+      { key: "price", type: "integer" },
+      { key: "nextdate", type: "datetime" },
+      { key: "note", type: "string", size: 3337 },
+      { key: "account", type: "string", size: 100 },
+      { key: "currency", type: "string", size: 100 },
+      { key: "continue", type: "boolean", default: true },
+      { key: "category", type: "string", size: 100 },
+      { key: "purpose", type: "string", size: 100 },
+      { key: "usageFrequency", type: "string", size: 50 },
+      { key: "friendliness", type: "string", size: 50 },
+      { key: "alternative", type: "string", size: 200 },
+      { key: "retentionRecommendation", type: "string", size: 50 },
+      { key: "archived", type: "boolean", default: false }
+    ]
+  },
+  image: {
+    name: "image",
+    title: "Image",
+    description: "Image file metadata.",
+    attributes: [
+      { key: "name", type: "string", size: 100, required: true },
+      { key: "file", type: "string", size: 500 },
+      { key: "filetype", type: "string", size: 20 },
+      { key: "note", type: "string", size: 500 },
+      { key: "ref", type: "string", size: 300 },
+      { key: "category", type: "string", size: 100 },
+      { key: "hash", type: "string", size: 300 },
+      { key: "cover", type: "boolean", default: false }
+    ]
+  },
+  video: {
+    name: "video",
+    title: "Video",
+    description: "Video file metadata.",
+    attributes: [
+      { key: "name", type: "string", size: 100, required: true },
+      { key: "file", type: "string", size: 500 },
+      { key: "filetype", type: "string", size: 20 },
+      { key: "note", type: "string", size: 500 },
+      { key: "ref", type: "string", size: 300 },
+      { key: "category", type: "string", size: 100 },
+      { key: "hash", type: "string", size: 300 },
+      { key: "cover", type: "string", size: 500 },
+      { key: "fileSize", type: "integer" }
+    ]
+  },
+  music: {
+    name: "music",
+    title: "Music",
+    description: "Music file metadata and lyrics.",
+    attributes: [
+      { key: "name", type: "string", size: 100, required: true },
+      { key: "file", type: "string", size: 500 },
+      { key: "filetype", type: "string", size: 20 },
+      { key: "lyrics", type: "string", size: 3337 },
+      { key: "note", type: "string", size: 500 },
+      { key: "ref", type: "string", size: 300 },
+      { key: "category", type: "string", size: 100 },
+      { key: "hash", type: "string", size: 300 },
+      { key: "language", type: "string", size: 100 },
+      { key: "cover", type: "string", size: 500 }
+    ]
+  },
+  podcast: {
+    name: "podcast",
+    title: "Podcast",
+    description: "Podcast file metadata.",
+    attributes: [
+      { key: "name", type: "string", size: 100, required: true },
+      { key: "file", type: "string", size: 500 },
+      { key: "filetype", type: "string", size: 20 },
+      { key: "note", type: "string", size: 500 },
+      { key: "ref", type: "string", size: 300 },
+      { key: "category", type: "string", size: 100 },
+      { key: "hash", type: "string", size: 300 },
+      { key: "cover", type: "string", size: 500 }
+    ]
+  },
+  commondocument: {
+    name: "commondocument",
+    title: "Common Document",
+    description: "Document file metadata.",
+    attributes: [
+      { key: "name", type: "string", size: 100, required: true },
+      { key: "file", type: "string", size: 500 },
+      { key: "filetype", type: "string", size: 20 },
+      { key: "note", type: "string", size: 500 },
+      { key: "ref", type: "string", size: 300 },
+      { key: "category", type: "string", size: 100 },
+      { key: "hash", type: "string", size: 300 },
+      { key: "cover", type: "string", size: 500 }
+    ]
+  },
+  routine: {
+    name: "routine",
+    title: "Routine",
+    description: "Routine and recurring task tracking.",
+    attributes: [
+      { key: "name", type: "string", size: 100, required: true },
+      { key: "note", type: "string", size: 100 },
+      { key: "lastdate1", type: "datetime" },
+      { key: "lastdate2", type: "datetime" },
+      { key: "lastdate3", type: "datetime" },
+      { key: "link", type: "url" },
+      { key: "photo", type: "url" }
+    ]
+  }
+} satisfies Record<string, TableSchema>;
+
+export const TABLE_SCHEMA_LIST = Object.values(TABLE_SCHEMAS);
