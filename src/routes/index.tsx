@@ -205,11 +205,21 @@ export default function Home() {
       ? Boolean(config?.tokens.preview.configured)
       : Boolean(config?.tokens.delivery.configured);
   };
-  const canTest = () => hasSpaceId() && hasActiveToken() && !isTesting();
+  const canTest = () => !isTesting();
 
   const testConnection = async () => {
     setIsTesting(true);
     setResult(null);
+
+    if (!hasSpaceId() || !hasActiveToken()) {
+      setResult({
+        ok: false,
+        message:
+          "請先填入 Contentful Space ID 與 Access Token，或確認 Stormkit environment variables 已設定並重新部署。"
+      });
+      setIsTesting(false);
+      return;
+    }
 
     try {
       const response = await fetch("/api/test-contentful", {
@@ -522,7 +532,7 @@ export default function Home() {
             <button
               class="primary"
               type="button"
-              disabled={!canManageTables() || isInitializingAll()}
+              disabled={isInitializingAll()}
               onClick={() => initializeTables()}
             >
               {isInitializingAll() ? text.initializingAll : text.initAll}
@@ -593,7 +603,7 @@ export default function Home() {
                     <button
                       class="secondary"
                       type="button"
-                      disabled={!canManageTables() || initializingTableId() === table.id}
+                      disabled={initializingTableId() === table.id}
                       onClick={() => initializeTables(table.id)}
                     >
                       {initializingTableId() === table.id ? text.initializingAll : text.initSingle}
