@@ -201,6 +201,40 @@ export const TABLE_SCHEMAS = {
       { key: "link", type: "url" },
       { key: "photo", type: "url" }
     ]
+  },
+  landtophistory: {
+    name: "landtophistory",
+    title: "Landtop History",
+    description: "Snapshot history records aligned with the fengbroaiappwrite table initializer.",
+    attributes: [
+      { key: "source", type: "string", size: 20, required: true },
+      { key: "snapshotKey", type: "string", size: 220, required: true },
+      { key: "productId", type: "string", size: 180, required: true },
+      { key: "brand", type: "string", size: 20, required: true },
+      { key: "name", type: "string", size: 200, required: true },
+      { key: "sourceUrl", type: "url" },
+      { key: "landtopPrice", type: "integer" },
+      { key: "suggestedPrice", type: "integer" },
+      { key: "snapshotDate", type: "datetime", required: true }
+    ]
+  },
+  croncontentful: {
+    name: "croncontentful",
+    title: "Cron Contentful",
+    description: "Cron targets and run metadata for Contentful-related scheduled jobs.",
+    attributes: [
+      { key: "name", type: "string", size: 120, required: true },
+      { key: "targetUrl", type: "url", required: true },
+      { key: "method", type: "string", size: 10 },
+      { key: "schedule", type: "string", size: 120 },
+      { key: "contentType", type: "string", size: 120 },
+      { key: "locale", type: "string", size: 50 },
+      { key: "enabled", type: "boolean", default: true },
+      { key: "lastStatus", type: "string", size: 50 },
+      { key: "lastRunAt", type: "datetime" },
+      { key: "lastSuccessAt", type: "datetime" },
+      { key: "note", type: "string", size: 500 }
+    ]
   }
 } satisfies Record<string, TableSchema>;
 

@@ -1,4 +1,4 @@
-import { createEffect, createSignal, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 
 type ContentfulSettings = {
   spaceId: string;
@@ -29,6 +29,29 @@ type TestFailure = {
 
 type TestResult = TestSuccess | TestFailure;
 
+type TableStatus = {
+  id: string;
+  title: string;
+  expectedFields: number;
+  actualFields: number;
+  missingFields: string[];
+  conflictFields: Array<{ id: string; expected: string; actual: string }>;
+  exists: boolean;
+  published: boolean;
+};
+
+type TableStatusesResponse =
+  | { ok: true; tables: TableStatus[] }
+  | { ok: false; message: string };
+
+type TableInitializeResult = TableStatus & {
+  action: "created" | "updated" | "skipped";
+};
+
+type TableInitializeResponse =
+  | { ok: true; results: TableInitializeResult[] }
+  | { ok: false; message: string };
+
 const STORAGE_KEY = "fengbro-contentful-settings";
 
 const text = {
@@ -36,7 +59,14 @@ const text = {
   saveSettings: "\u5132\u5b58\u8a2d\u5b9a",
   testing: "\u6e2c\u8a66\u4e2d...",
   testConnection: "\u6e2c\u8a66\u9023\u7dda",
-  unknownError: "\u6e2c\u8a66\u9023\u7dda\u6642\u767c\u751f\u672a\u77e5\u932f\u8aa4"
+  tableStatus: "\u8F09\u5165 Table \u72C0\u614B",
+  loadingStatus: "\u8F09\u5165\u4E2D...",
+  initAll: "\u521D\u59CB\u5316\u5168\u90E8 Table",
+  initializingAll: "\u521D\u59CB\u5316\u4E2D...",
+  initSingle: "\u521D\u59CB\u5316",
+  unknownError: "\u767C\u751F\u672A\u77E5\u932F\u8AA4",
+  missingMgmtToken:
+    "\u8ACB\u5148\u586B\u5165 Contentful Management Token\uff0c\u624D\u80FD\u8F09\u5165\u6216\u521D\u59CB\u5316 Table\u3002"
 };
 
 const defaultSettings: ContentfulSettings = {
@@ -60,11 +90,26 @@ function loadSettings() {
   }
 }
 
+function resultClass(ok: boolean) {
+  return ok ? "result success" : "result error";
+}
+
+function tableBadgeClass(status: TableStatus) {
+  if (!status.exists) return "badge neutral";
+  if (status.conflictFields.length > 0 || status.missingFields.length > 0) return "badge warning";
+  return "badge success";
+}
+
 export default function Home() {
   const [settings, setSettings] = createSignal<ContentfulSettings>(loadSettings());
   const [isTesting, setIsTesting] = createSignal(false);
   const [isSaved, setIsSaved] = createSignal(false);
   const [result, setResult] = createSignal<TestResult | null>(null);
+  const [tables, setTables] = createSignal<TableStatus[]>([]);
+  const [tableMessage, setTableMessage] = createSignal<{ ok: boolean; message: string } | null>(null);
+  const [isLoadingTables, setIsLoadingTables] = createSignal(false);
+  const [isInitializingAll, setIsInitializingAll] = createSignal(false);
+  const [initializingTableId, setInitializingTableId] = createSignal<string | null>(null);
 
   createEffect(() => {
     if (typeof window === "undefined") return;
@@ -74,7 +119,13 @@ export default function Home() {
   const updateSetting = <K extends keyof ContentfulSettings>(key: K, value: ContentfulSettings[K]) => {
     setSettings((current) => ({ ...current, [key]: value }));
     setIsSaved(false);
-    setResult(null);
+    if (key === "managementToken" || key === "spaceId" || key === "environmentId") {
+      setTableMessage(null);
+      setTables([]);
+    }
+    if (key === "deliveryToken" || key === "previewToken" || key === "spaceId" || key === "environmentId") {
+      setResult(null);
+    }
   };
 
   const saveSettings = () => {
@@ -84,6 +135,12 @@ export default function Home() {
     setIsSaved(true);
     window.setTimeout(() => setIsSaved(false), 1800);
   };
+
+  const canManageTables = () =>
+    settings().spaceId.trim().length > 0 && settings().managementToken.trim().length > 0;
+
+  const activeToken = () => (settings().usePreview ? settings().previewToken : settings().deliveryToken);
+  const canTest = () => settings().spaceId.trim().length > 0 && activeToken().trim().length > 0 && !isTesting();
 
   const testConnection = async () => {
     setIsTesting(true);
@@ -107,8 +164,103 @@ export default function Home() {
     }
   };
 
-  const activeToken = () => (settings().usePreview ? settings().previewToken : settings().deliveryToken);
-  const canTest = () => settings().spaceId.trim().length > 0 && activeToken().trim().length > 0 && !isTesting();
+  const loadTableStatuses = async () => {
+    if (!canManageTables()) {
+      setTableMessage({ ok: false, message: text.missingMgmtToken });
+      return;
+    }
+
+    setIsLoadingTables(true);
+    setTableMessage(null);
+
+    try {
+      const response = await fetch("/api/contentful-tables", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "status",
+          settings: {
+            spaceId: settings().spaceId,
+            environmentId: settings().environmentId,
+            managementToken: settings().managementToken
+          }
+        })
+      });
+
+      const payload = (await response.json()) as TableStatusesResponse;
+      if (!payload.ok) {
+        setTableMessage({ ok: false, message: payload.message });
+        return;
+      }
+
+      setTables(payload.tables);
+      setTableMessage({
+        ok: true,
+        message: `Loaded ${payload.tables.length} table definitions.`
+      });
+    } catch (error) {
+      setTableMessage({
+        ok: false,
+        message: error instanceof Error ? error.message : text.unknownError
+      });
+    } finally {
+      setIsLoadingTables(false);
+    }
+  };
+
+  const initializeTables = async (tableName?: string) => {
+    if (!canManageTables()) {
+      setTableMessage({ ok: false, message: text.missingMgmtToken });
+      return;
+    }
+
+    if (tableName) {
+      setInitializingTableId(tableName);
+    } else {
+      setIsInitializingAll(true);
+    }
+    setTableMessage(null);
+
+    try {
+      const response = await fetch("/api/contentful-tables", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "initialize",
+          tableName,
+          settings: {
+            spaceId: settings().spaceId,
+            environmentId: settings().environmentId,
+            managementToken: settings().managementToken
+          }
+        })
+      });
+
+      const payload = (await response.json()) as TableInitializeResponse;
+      if (!payload.ok) {
+        setTableMessage({ ok: false, message: payload.message });
+        return;
+      }
+
+      const created = payload.results.filter((item) => item.action === "created").length;
+      const updated = payload.results.filter((item) => item.action === "updated").length;
+      const skipped = payload.results.filter((item) => item.action === "skipped").length;
+
+      setTableMessage({
+        ok: true,
+        message: `Initialization finished. created=${created}, updated=${updated}, skipped=${skipped}`
+      });
+      await loadTableStatuses();
+    } catch (error) {
+      setTableMessage({
+        ok: false,
+        message: error instanceof Error ? error.message : text.unknownError
+      });
+    } finally {
+      setInitializingTableId(null);
+      setIsInitializingAll(false);
+    }
+  };
 
   return (
     <main class="shell">
@@ -116,10 +268,11 @@ export default function Home() {
         <p class="eyebrow">SolidStart Contentful Tool</p>
         <div class="hero-row">
           <div>
-            <h1>&#x92D2;&#x5144;&#x8A2D;&#x5B9A;</h1>
+            <h1>&#x92d2;&#x5144;&#x8a2d;&#x5b9a;</h1>
             <p class="hero-copy">
-              &#x8A2D;&#x5B9A; Contentful &#x53C3;&#x6578;&#x4E26;&#x6E2C;&#x8A66; Delivery &#x6216; Preview API
-              &#x662F;&#x5426;&#x80FD;&#x8B80;&#x53D6;&#x8CC7;&#x6599;&#x3002;
+              &#x8A2D;&#x5B9A; Contentful &#x53C3;&#x6578;&#x3001;&#x6E2C;&#x8A66; API
+              &#x9023;&#x7DDA;&#xFF0C;&#x4E26;&#x53C3;&#x8003; fengbroaiappwrite
+              &#x6D41;&#x7A0B;&#x521D;&#x59CB;&#x5316; Table&#x3002;
             </p>
           </div>
           <div class="status-pill">Contentful</div>
@@ -132,8 +285,7 @@ export default function Home() {
             <h2 id="settings-title">Contentful &#x53C3;&#x6578;</h2>
             <p>
               &#x8A2D;&#x5B9A;&#x6703;&#x5B58;&#x5728;&#x9019;&#x53F0;&#x700F;&#x89BD;&#x5668;&#x7684; localStorage&#x3002;
-              &#x6E2C;&#x8A66;&#x9023;&#x7DDA;&#x6703;&#x8B80;&#x53D6;&#x4E00;&#x7B46; entry
-              &#x9A57;&#x8B49; token &#x8207;&#x74B0;&#x5883;&#x662F;&#x5426;&#x6B63;&#x78BA;&#x3002;
+              Table &#x521D;&#x59CB;&#x5316;&#x9700;&#x8981; Management Token&#x3002;
             </p>
           </div>
           <label class="switch">
@@ -195,7 +347,7 @@ export default function Home() {
               type="password"
               value={settings().managementToken}
               onInput={(event) => updateSetting("managementToken", event.currentTarget.value)}
-              placeholder="Optional management token"
+              placeholder="Content Management API token"
               autocomplete="off"
             />
           </label>
@@ -226,7 +378,7 @@ export default function Home() {
 
             if (!value.ok) {
               return (
-                <div class="result error" role="status">
+                <div class={resultClass(false)} role="status">
                   <strong>&#x9023;&#x7DDA;&#x5931;&#x6557;</strong>
                   <p>{value.message}</p>
                   <Show when={value.status}>
@@ -237,7 +389,7 @@ export default function Home() {
             }
 
             return (
-              <div class="result success" role="status">
+              <div class={resultClass(true)} role="status">
                 <strong>&#x9023;&#x7DDA;&#x6210;&#x529F;</strong>
                 <p>
                   {value.mode} API &#x5DF2;&#x9023;&#x4E0A; {value.spaceId}/{value.environmentId}
@@ -252,6 +404,113 @@ export default function Home() {
               </div>
             );
           }}
+        </Show>
+      </section>
+
+      <section class="panel table-panel" aria-labelledby="table-init-title">
+        <div class="panel-heading">
+          <div>
+            <h2 id="table-init-title">Table Initialization</h2>
+            <p>
+              &#x53C3;&#x8003; fengbroaiappwrite &#x7684; create-table
+              &#x6982;&#x5FF5;&#xFF0C;&#x53EF;&#x6AA2;&#x67E5; Contentful content type
+              &#x72C0;&#x614B;&#x4E26;&#x521D;&#x59CB;&#x5316;&#x5305;&#x542B; CronContentful &#x5728;&#x5167;&#x7684;
+              table schema&#x3002;
+            </p>
+          </div>
+          <div class="toolbar">
+            <button
+              class="secondary"
+              type="button"
+              disabled={isLoadingTables()}
+              onClick={loadTableStatuses}
+            >
+              {isLoadingTables() ? text.loadingStatus : text.tableStatus}
+            </button>
+            <button
+              class="primary"
+              type="button"
+              disabled={!canManageTables() || isInitializingAll()}
+              onClick={() => initializeTables()}
+            >
+              {isInitializingAll() ? text.initializingAll : text.initAll}
+            </button>
+          </div>
+        </div>
+
+        <Show when={tableMessage()}>
+          {(message) => (
+            <div class={resultClass(message().ok)} role="status">
+              <p>{message().message}</p>
+            </div>
+          )}
+        </Show>
+
+        <Show
+          when={tables().length > 0}
+          fallback={
+            <div class="empty-state">
+              <p>
+                &#x8ACB;&#x586B;&#x5165; Management Token
+                &#x5F8C;&#x9EDE;&#x64CA;&#x300C;&#x8F09;&#x5165; Table
+                &#x72C0;&#x614B;&#x300D;&#x3002;
+              </p>
+            </div>
+          }
+        >
+          <div class="table-list">
+            <For each={tables()}>
+              {(table) => (
+                <article class="table-card">
+                  <div class="table-card-header">
+                    <div>
+                      <h3>{table.title}</h3>
+                      <p class="table-id">{table.id}</p>
+                    </div>
+                    <span class={tableBadgeClass(table)}>
+                      {table.exists
+                        ? table.conflictFields.length > 0 || table.missingFields.length > 0
+                          ? "Needs sync"
+                          : "Ready"
+                        : "Missing"}
+                    </span>
+                  </div>
+
+                  <div class="table-meta">
+                    <span>expected {table.expectedFields}</span>
+                    <span>actual {table.actualFields}</span>
+                    <span>{table.published ? "published" : "draft"}</span>
+                  </div>
+
+                  <Show when={table.missingFields.length > 0}>
+                    <p class="table-notes">
+                      missing: {table.missingFields.join(", ")}
+                    </p>
+                  </Show>
+
+                  <Show when={table.conflictFields.length > 0}>
+                    <p class="table-notes">
+                      conflict:{" "}
+                      {table.conflictFields
+                        .map((field) => `${field.id}(${field.actual} -> ${field.expected})`)
+                        .join(", ")}
+                    </p>
+                  </Show>
+
+                  <div class="table-card-actions">
+                    <button
+                      class="secondary"
+                      type="button"
+                      disabled={!canManageTables() || initializingTableId() === table.id}
+                      onClick={() => initializeTables(table.id)}
+                    >
+                      {initializingTableId() === table.id ? text.initializingAll : text.initSingle}
+                    </button>
+                  </div>
+                </article>
+              )}
+            </For>
+          </div>
         </Show>
       </section>
     </main>
