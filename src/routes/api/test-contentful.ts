@@ -10,6 +10,27 @@ type ContentfulSettings = {
   usePreview?: boolean;
 };
 
+type ContentfulPayload = {
+  items?: unknown[];
+  message?: string;
+  total?: number;
+};
+
+type ContentfulFetchResult =
+  | {
+      ok: true;
+      locale: string;
+      localeFallback: boolean;
+      payload: ContentfulPayload;
+    }
+  | {
+      ok: false;
+      locale: string;
+      localeFallback: boolean;
+      payload: ContentfulPayload;
+      status: number;
+    };
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body, null, 2), {
     status,
@@ -45,6 +66,81 @@ function entryTitle(entry: unknown) {
   return null;
 }
 
+function isUnknownLocale(status: number, payload: ContentfulPayload) {
+  return status === 400 && /unknown locale/i.test(payload.message ?? "");
+}
+
+async function fetchContentfulEntries(options: {
+  environmentId: string;
+  host: string;
+  locale: string;
+  spaceId: string;
+  token: string;
+}): Promise<ContentfulFetchResult> {
+  const buildUrl = (locale?: string) => {
+    const url = new URL(
+      `https://${options.host}/spaces/${encodeURIComponent(options.spaceId)}/environments/${encodeURIComponent(options.environmentId)}/entries`
+    );
+    url.searchParams.set("limit", "1");
+
+    if (locale) {
+      url.searchParams.set("locale", locale);
+    }
+
+    return url;
+  };
+
+  const requestEntries = async (locale?: string) => {
+    const response = await fetch(buildUrl(locale), {
+      headers: {
+        Authorization: `Bearer ${options.token}`
+      }
+    });
+    const payload = (await response.json().catch(() => ({}))) as ContentfulPayload;
+
+    return { response, payload };
+  };
+
+  const firstAttempt = await requestEntries(options.locale);
+  if (firstAttempt.response.ok) {
+    return {
+      ok: true,
+      locale: options.locale,
+      localeFallback: false,
+      payload: firstAttempt.payload
+    };
+  }
+
+  if (options.locale && isUnknownLocale(firstAttempt.response.status, firstAttempt.payload)) {
+    const fallbackAttempt = await requestEntries();
+
+    if (fallbackAttempt.response.ok) {
+      return {
+        ok: true,
+        locale: "default",
+        localeFallback: true,
+        payload: fallbackAttempt.payload
+      };
+    }
+
+    return {
+      ok: false,
+      locale: "default",
+      localeFallback: true,
+      payload: fallbackAttempt.payload,
+      status: fallbackAttempt.response.status
+    };
+  }
+
+  return {
+    ok: false,
+    locale: options.locale,
+    localeFallback: false,
+    payload: firstAttempt.payload,
+    status: firstAttempt.response.status
+  };
+}
+
 export async function POST(event: APIEvent) {
   const settings = (await event.request.json()) as ContentfulSettings;
   const env = getContentfulEnv({ allowMissingTokens: true });
@@ -72,46 +168,44 @@ export async function POST(event: APIEvent) {
   }
 
   const host = settings.usePreview ? "preview.contentful.com" : "cdn.contentful.com";
-  const url = new URL(`https://${host}/spaces/${encodeURIComponent(spaceId)}/environments/${encodeURIComponent(environmentId)}/entries`);
-  url.searchParams.set("limit", "1");
-
-  if (locale) {
-    url.searchParams.set("locale", locale);
-  }
-
   try {
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+    const result = await fetchContentfulEntries({
+      environmentId,
+      host,
+      locale,
+      spaceId,
+      token
     });
-    const payload = await response.json().catch(() => ({}));
 
-    if (!response.ok) {
+    if (!result.ok) {
       return jsonResponse(
         {
           ok: false,
-          status: response.status,
+          status: result.status,
           message: contentfulConnectionMessage(
-            response.status,
-            payload?.message ||
+            result.status,
+            result.payload.message ||
               "Contentful connection failed. Please check the Space ID, Environment ID, and token.",
             settings.usePreview
-          )
+          ),
+          locale: result.locale,
+          localeFallback: result.localeFallback
         },
-        response.status
+        result.status
       );
     }
 
-    const firstEntry = Array.isArray(payload.items) ? payload.items[0] : null;
+    const firstEntry = Array.isArray(result.payload.items) ? result.payload.items[0] : null;
 
     return jsonResponse({
       ok: true,
       mode: settings.usePreview ? "Preview" : "Delivery",
       spaceId,
       environmentId,
-      total: Number(payload.total ?? 0),
-      itemCount: Array.isArray(payload.items) ? payload.items.length : 0,
+      locale: result.locale,
+      localeFallback: result.localeFallback,
+      total: Number(result.payload.total ?? 0),
+      itemCount: Array.isArray(result.payload.items) ? result.payload.items.length : 0,
       firstEntryTitle: entryTitle(firstEntry),
       checkedAt: new Date().toISOString()
     });

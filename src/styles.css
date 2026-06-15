@@ -241,6 +241,13 @@ button:disabled {
   color: #5c6b82;
 }
 
+.notice {
+  margin: 10px 0 0;
+  color: #805200;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
 .table-panel {
   margin-top: 24px;
 }

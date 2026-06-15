@@ -15,6 +15,8 @@ type TestSuccess = {
   mode: string;
   spaceId: string;
   environmentId: string;
+  locale: string;
+  localeFallback: boolean;
   total: number;
   itemCount: number;
   firstEntryTitle: string | null;
@@ -24,6 +26,8 @@ type TestSuccess = {
 type TestFailure = {
   ok: false;
   message: string;
+  locale?: string;
+  localeFallback?: boolean;
   status?: number;
 };
 
@@ -89,7 +93,8 @@ const text = {
   missingMgmtToken:
     "\u8ACB\u5148\u586B\u5165 Contentful Management Token\uff0c\u6216\u5728 Stormkit \u8A2D\u5B9A CONTENTFUL_MANAGEMENT_TOKEN \u5F8C\u91CD\u65B0\u90E8\u7F72\u3002",
   envConfigured: "Stormkit env configured",
-  envMissing: "Stormkit env missing"
+  envMissing: "Stormkit env missing",
+  localeFallback: "Locale is not enabled in Contentful, so the request used the space default locale."
 };
 
 const defaultSettings: ContentfulSettings = {
@@ -435,7 +440,7 @@ export default function Home() {
             <input
               value={settings().locale}
               onInput={(event) => updateSetting("locale", event.currentTarget.value)}
-              placeholder="zh-TW"
+              placeholder="Optional, leave blank for default locale"
               autocomplete="off"
             />
           </label>
@@ -497,7 +502,12 @@ export default function Home() {
                   {value.mode} API &#x5DF2;&#x9023;&#x4E0A; {value.spaceId}/{value.environmentId}
                   &#xFF0C;&#x5171;&#x627E;&#x5230; {value.total} &#x7B46;&#x9805;&#x76EE;&#x3002;
                 </p>
+                <Show when={value.localeFallback}>
+                  <p class="notice">{text.localeFallback}</p>
+                </Show>
                 <small>
+                  Locale: {value.locale}
+                  {" · "}
                   &#x9019;&#x6B21;&#x56DE;&#x50B3; {value.itemCount} &#x7B46;
                   <Show when={value.firstEntryTitle}>
                     &#xFF0C;&#x7B2C;&#x4E00;&#x7B46;&#xFF1A;{value.firstEntryTitle}
