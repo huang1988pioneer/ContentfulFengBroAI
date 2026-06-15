@@ -230,6 +230,10 @@ button:disabled {
   margin-top: 20px;
   border-radius: 8px;
   padding: 16px;
+  max-height: 320px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .result p {
@@ -307,6 +311,8 @@ button:disabled {
   color: #334155;
   font-size: 0.94rem;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .table-card-actions {

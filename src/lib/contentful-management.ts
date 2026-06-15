@@ -185,6 +185,7 @@ function contentfulFieldType(attribute: TableAttribute) {
   if (attribute.type === "integer") return "Integer";
   if (attribute.type === "datetime") return "Date";
   if (attribute.type === "boolean") return "Boolean";
+  if (attribute.type === "object") return "Object";
   if (attribute.type === "url") return "Symbol";
   return (attribute.size ?? 0) > 256 ? "Text" : "Symbol";
 }

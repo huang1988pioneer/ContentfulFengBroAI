@@ -1,4 +1,4 @@
-export type TableAttributeType = "string" | "integer" | "url" | "datetime" | "boolean";
+export type TableAttributeType = "string" | "integer" | "url" | "datetime" | "boolean" | "object";
 
 export type TableAttribute = {
   key: string;
@@ -19,19 +19,11 @@ export const TABLE_SCHEMAS = {
   commonaccount: {
     name: "commonaccount",
     title: "Common Account",
-    description: "Shared account records from the FengBro Appwrite table design.",
+    description: "Shared account records adapted for Contentful field limits.",
     attributes: [
       { key: "name", type: "string", size: 100, required: true },
-      ...Array.from({ length: 37 }, (_, index) => ({
-        key: `site${(index + 1).toString().padStart(2, "0")}`,
-        type: "string" as const,
-        size: 100
-      })),
-      ...Array.from({ length: 37 }, (_, index) => ({
-        key: `note${(index + 1).toString().padStart(2, "0")}`,
-        type: "string" as const,
-        size: 100
-      }))
+      { key: "sites", type: "object" },
+      { key: "notes", type: "object" }
     ]
   },
   bank: {

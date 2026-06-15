@@ -53,7 +53,7 @@ function contentfulErrorResponse(error: unknown, context: RequestContext) {
   return jsonResponse(
     {
       ok: false,
-      message: raw || "Unable to manage Contentful tables"
+      message: contentfulMessage || "Unable to manage Contentful tables"
     },
     status || 500
   );
@@ -73,17 +73,32 @@ function getErrorStatus(error: unknown, raw: string) {
 
 function getContentfulMessage(raw: string) {
   const parsed = parseJsonLikeMessage(raw);
+  const firstValidationError = parsed?.details?.errors?.[0]?.details;
+  if (parsed?.message && firstValidationError) {
+    return `${parsed.message}: ${firstValidationError}`;
+  }
   if (parsed?.message) return parsed.message;
+  const messageMatch = raw.match(/"message"\s*:\s*"([^"]+)"/);
+  if (messageMatch?.[1]) return messageMatch[1];
   if (raw.includes("Access token invalid")) return "Access token invalid";
-  return raw.split("\n")[0].slice(0, 240);
+  return raw
+    .replace(/\s+/g, " ")
+    .replace(/"Authorization"\s*:\s*"Bearer [^"]+"/g, '"Authorization":"Bearer [hidden]"')
+    .slice(0, 240);
 }
 
-function parseJsonLikeMessage(raw: string): { message?: string } | null {
+function parseJsonLikeMessage(raw: string): {
+  details?: { errors?: Array<{ details?: string }> };
+  message?: string;
+} | null {
   const jsonStart = raw.indexOf("{");
   if (jsonStart === -1) return null;
 
   try {
-    return JSON.parse(raw.slice(jsonStart)) as { message?: string };
+    return JSON.parse(raw.slice(jsonStart)) as {
+      details?: { errors?: Array<{ details?: string }> };
+      message?: string;
+    };
   } catch {
     return null;
   }
