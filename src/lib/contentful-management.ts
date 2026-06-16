@@ -82,6 +82,8 @@ export type MediaUploadResult = {
   fileType: string;
   hash: string;
   locale: string;
+  message?: string;
+  partial?: boolean;
   url: string;
 };
 
@@ -92,6 +94,15 @@ export type ContentfulRecord = {
   published: boolean;
   fields: Record<string, unknown>;
 };
+
+function cleanManagementMessage(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error);
+  const parsedMessage = raw.match(/"message"\s*:\s*"([^"]+)"/)?.[1];
+  return (parsedMessage ?? raw)
+    .replace(/\s+/g, " ")
+    .replace(/"Authorization"\s*:\s*"Bearer [^"]+"/g, '"Authorization":"Bearer [hidden]"')
+    .slice(0, 320);
+}
 
 export type ListEntriesResult = {
   items: ContentfulRecord[];
@@ -248,50 +259,66 @@ export async function uploadFengBroMedia(input: MediaUploadInput): Promise<Media
       }
     }
   });
-  const processedAsset = await context.client.asset.processForLocale(
-    context.params,
-    createdAsset,
-    locale,
-    { processingCheckRetries: 12, processingCheckWait: 1000 }
-  );
-  const publishedAsset = await context.client.asset.publish(
-    { ...context.params, assetId: processedAsset.sys.id },
-    processedAsset
-  );
-  const url = getAssetUrl(publishedAsset, locale);
-  const createdEntry = await context.client.entry.create(
-    { ...context.params, contentTypeId },
-    {
-      fields: buildMediaEntryFields({
-        category,
-        contentType,
-        contentTypeId,
-        fileSize: buffer.byteLength,
-        hash,
-        locale,
-        note,
-        ref,
-        title,
-        url
-      })
-    }
-  );
-  const publishedEntry = await context.client.entry.publish(
-    { ...context.params, entryId: createdEntry.sys.id },
-    createdEntry
-  );
+  try {
+    const processedAsset = await context.client.asset.processForLocale(
+      context.params,
+      createdAsset,
+      locale,
+      { processingCheckRetries: 12, processingCheckWait: 1000 }
+    );
+    const publishedAsset = await context.client.asset.publish(
+      { ...context.params, assetId: processedAsset.sys.id },
+      processedAsset
+    );
+    const url = getAssetUrl(publishedAsset, locale);
+    const createdEntry = await context.client.entry.create(
+      { ...context.params, contentTypeId },
+      {
+        fields: buildMediaEntryFields({
+          category,
+          contentType,
+          contentTypeId,
+          fileSize: buffer.byteLength,
+          hash,
+          locale,
+          note,
+          ref,
+          title,
+          url
+        })
+      }
+    );
+    const publishedEntry = await context.client.entry.publish(
+      { ...context.params, entryId: createdEntry.sys.id },
+      createdEntry
+    );
 
-  return {
-    assetId: publishedAsset.sys.id,
-    contentTypeId,
-    entryId: publishedEntry.sys.id,
-    fileName,
-    fileSize: buffer.byteLength,
-    fileType: contentType,
-    hash,
-    locale,
-    url
-  };
+    return {
+      assetId: publishedAsset.sys.id,
+      contentTypeId,
+      entryId: publishedEntry.sys.id,
+      fileName,
+      fileSize: buffer.byteLength,
+      fileType: contentType,
+      hash,
+      locale,
+      url
+    };
+  } catch (error) {
+    return {
+      assetId: createdAsset.sys.id,
+      contentTypeId,
+      entryId: "",
+      fileName,
+      fileSize: buffer.byteLength,
+      fileType: contentType,
+      hash,
+      locale,
+      message: cleanManagementMessage(error),
+      partial: true,
+      url: getAssetUrl(createdAsset, locale)
+    };
+  }
 }
 
 export async function listContentfulEntries(
