@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { ContentfulCsvPanel } from "./ContentfulCsvPanel";
 import { TABLE_SCHEMA_LIST, type TableAttribute } from "../lib/table-schemas";
+import { uploadToContentfulDirect } from "../lib/contentful-client-upload";
 
 type ContentfulSettings = {
   spaceId: string;
@@ -996,83 +997,48 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     }
 
     const fileDetail = `${file.name} (${formatFileSize(file.size)})`;
-    if (file.size > DIRECT_UPLOAD_WARNING_BYTES) {
-      setMessage({
-        ok: false,
-        text: `提醒：${fileDetail} 對部署平台來說可能太大，若失敗請改用較小檔案或先上傳到外部儲存後再填 URL。`
-      });
-    } else {
-      setMessage(null);
-    }
+    setMessage(null);
 
     setIsUploadingMedia(true);
     setUploadProgress({
       active: true,
       detail: fileDetail,
-      label: "準備讀取檔案",
-      percent: 3
+      label: "準備上傳檔案",
+      percent: 5
     });
+
     try {
-      const fileData = await fileToDataUrl(file, (percent) => {
-        setUploadProgress({
-          active: true,
-          detail: fileDetail,
-          label: "讀取檔案中",
-          percent: Math.max(3, Math.min(35, Math.round(percent * 0.35)))
-        });
-      });
-      setUploadProgress({
-        active: true,
-        detail: fileDetail,
-        label: "送出到伺服器",
-        percent: 38
-      });
-      const response = await postUploadJson(
+      // Use direct upload to Contentful (bypasses server-side API limits)
+      const result = await uploadToContentfulDirect(
         {
-          kind,
-          fileName: file.name,
-          contentType: file.type,
-          fileData,
-          displayName: String(formData.get("displayName") ?? ""),
-          category: String(formData.get("category") ?? ""),
-          note: String(formData.get("note") ?? ""),
-          ref: String(formData.get("ref") ?? ""),
           spaceId: props.settings.spaceId,
           environmentId: props.settings.environmentId,
           locale: props.settings.locale,
-          managementToken: props.settings.managementToken
+          managementToken: props.settings.managementToken,
+          kind,
+          fileName: file.name,
+          contentType: file.type,
+          file,
+          displayName: String(formData.get("displayName") ?? ""),
+          category: String(formData.get("category") ?? ""),
+          note: String(formData.get("note") ?? ""),
+          ref: String(formData.get("ref") ?? "")
         },
         (percent) => {
+          let label = "上傳檔案中";
+          if (percent >= 70) label = "處理並建立 entry";
+          else if (percent >= 60) label = "等待 Contentful 處理";
+          else if (percent >= 25) label = "上傳檔案到 Contentful";
+          else if (percent >= 10) label = "建立 Asset";
+          
           setUploadProgress({
             active: true,
             detail: fileDetail,
-            label: "上傳資料中",
-            percent: 35 + Math.round(percent * 0.4)
+            label,
+            percent
           });
         }
       );
-      setUploadProgress({
-        active: true,
-        detail: fileDetail,
-        label: "Contentful 處理檔案與建立 entry",
-        percent: 86
-      });
-      const payload = await readMediaUploadResponse(response, {
-        contentTypeId: activeModule()?.contentType ?? kind,
-        fileName: file.name
-      });
-
-      if (!payload.ok) {
-        form.reset();
-        setUploadProgress({
-          active: false,
-          detail: "",
-          label: "",
-          percent: 0
-        });
-        setMessage({ ok: false, text: payload.message });
-        return;
-      }
 
       form.reset();
       setUploadProgress({
@@ -1083,9 +1049,9 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
       });
       setMessage({
         ok: true,
-        text: payload.partial
-          ? `已上傳 ${payload.fileName} 到 Contentful Media。${payload.message ? `後續同步未完成：${payload.message}` : "平台回傳空內容，所以 entry 同步狀態未知；請重新載入資料確認。"}`
-          : `已上傳 ${payload.fileName}，建立 ${payload.contentTypeId} entry。Asset: ${payload.assetId}，Entry: ${payload.entryId}`
+        text: result.partial
+          ? `已上傳 ${result.fileName} 到 Contentful Media。${result.message ? `後續同步未完成：${result.message}` : "entry 同步狀態未知；請重新載入資料確認。"}`
+          : `已上傳 ${result.fileName}，建立 ${result.contentTypeId} entry。Asset: ${result.assetId}，Entry: ${result.entryId}`
       });
       await loadRecords();
     } catch (error) {
@@ -1284,6 +1250,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                       <div>
                         <h4>上傳{module().label}</h4>
                         <p>建立 Contentful Asset，並同步建立 {module().contentType} entry，填入檔案 URL、hash 與備註。</p>
+                        <p class="info-note">💡 現已改用直接上傳至 Contentful，支援大檔案（付費帳號最高 1 GB）</p>
                       </div>
                       <div class="media-upload-grid">
                         <label>

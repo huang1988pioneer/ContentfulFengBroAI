@@ -1940,3 +1940,16 @@ body:has(.shell) {
     width: fit-content;
   }
 }
+
+
+.shell .info-note {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #93c5fd;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 0.88rem;
+  font-weight: 650;
+  line-height: 1.5;
+}
