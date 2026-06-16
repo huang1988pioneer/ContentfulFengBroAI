@@ -1605,6 +1605,29 @@ body:has(.shell) {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.shell .editor-toggle-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  border: 1px solid #d9e2ef;
+  border-radius: 16px;
+  padding: 16px 18px;
+  background: #fcfdff;
+}
+
+.shell .editor-toggle-panel h4,
+.shell .editor-toggle-panel p {
+  margin: 0;
+}
+
+.shell .editor-toggle-panel p {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
 .shell .records-panel {
   min-width: 0;
 }
@@ -1695,8 +1718,13 @@ body:has(.shell) {
 }
 
 .shell .appwrite-workspace-grid .editor-panel {
+  order: -1;
   margin-top: 16px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.shell .appwrite-workspace-grid .editor-panel.collapsed {
+  display: none;
 }
 
 .shell .appwrite-workspace-grid .editor-heading,
@@ -1723,6 +1751,61 @@ body:has(.shell) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.shell .common-sites-editor {
+  display: grid;
+  gap: 14px;
+  grid-column: 1 / -1;
+  border: 1px solid #d9e2ef;
+  border-radius: 12px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.shell .common-sites-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shell .common-sites-heading p,
+.shell .common-sites-editor small {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 0.86rem;
+}
+
+.shell .common-sites-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.shell .common-sites-table {
+  display: grid;
+  gap: 8px;
+}
+
+.shell .common-sites-row {
+  display: grid;
+  grid-template-columns: 42px minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.shell .common-sites-row-head {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.shell .common-sites-index {
+  color: #64748b;
+  font-family: Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
 }
 
 .shell .record-media-preview {
@@ -1794,7 +1877,16 @@ body:has(.shell) {
   .shell .form-grid,
   .shell .crud-layout,
   .shell .workspace-grid,
-  .shell .table-list {
+  .shell .table-list,
+  .shell .media-upload-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .shell .common-sites-heading {
+    display: grid;
+  }
+
+  .shell .common-sites-row {
     grid-template-columns: 1fr;
   }
 

@@ -10,6 +10,7 @@ type ContentfulSettings = {
 
 type CsvPanelProps = {
   canManage?: boolean;
+  onImported?: (payload: Extract<CsvResponse, { ok: true }>) => Promise<void> | void;
   settings?: ContentfulSettings;
   tableName?: string;
 };
@@ -94,6 +95,7 @@ export function ContentfulCsvPanel(props: CsvPanelProps) {
         ok: true,
         text: `Imported ${payload.imported ?? 0} rows into ${payload.tableName}. Locale: ${payload.locale}`
       });
+      await props.onImported?.(payload);
     } catch (error) {
       setMessage({ ok: false, text: error instanceof Error ? error.message : "Unable to import CSV." });
     } finally {

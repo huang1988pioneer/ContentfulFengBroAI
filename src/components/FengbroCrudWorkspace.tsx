@@ -45,6 +45,12 @@ type MediaUploadResponse =
     }
   | { ok: false; message: string };
 
+type CommonSiteRow = {
+  id: number;
+  site: string;
+  note: string;
+};
+
 type CrudModule = {
   id: string;
   label: string;
@@ -254,9 +260,63 @@ const FIELD_LABELS: Record<string, string> = {
 };
 
 const schemaByName = new Map(TABLE_SCHEMA_LIST.map((schema) => [schema.name, schema]));
+const COMMON_SITE_ROW_LIMIT = 37;
 
 function fieldLabel(key: string) {
   return FIELD_LABELS[key] ?? key.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase());
+}
+
+function numberedKey(prefix: "note" | "site", index: number) {
+  return `${prefix}${(index + 1).toString().padStart(2, "0")}`;
+}
+
+function parseObjectField(value: unknown) {
+  if (!value) return {};
+  if (typeof value === "object") return value as Record<string, unknown>;
+  if (typeof value !== "string") return {};
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function commonSiteRowsFromFields(sitesValue: unknown, notesValue: unknown): CommonSiteRow[] {
+  const sites = parseObjectField(sitesValue);
+  const notes = parseObjectField(notesValue);
+  const rows = Array.from({ length: COMMON_SITE_ROW_LIMIT }, (_, index) => ({
+    id: index + 1,
+    site: stringifyFieldValue(sites[numberedKey("site", index)]).trim(),
+    note: stringifyFieldValue(notes[numberedKey("note", index)]).trim()
+  })).filter((row) => row.site || row.note);
+
+  return rows.length > 0 ? rows : [{ id: 1, site: "", note: "" }];
+}
+
+function commonSiteRowsToObject(rows: CommonSiteRow[], key: "note" | "site") {
+  const entries = rows
+    .map((row) => (key === "site" ? row.site : row.note).trim())
+    .map((value, index) => [numberedKey(key, index), value] as const)
+    .filter(([, value]) => value);
+
+  return Object.fromEntries(entries);
+}
+
+function displayCommonCollection(value: unknown, key: "note" | "site") {
+  const source = parseObjectField(value);
+  const values = Array.from({ length: COMMON_SITE_ROW_LIMIT }, (_, index) =>
+    stringifyFieldValue(source[numberedKey(key, index)]).trim()
+  ).filter(Boolean);
+
+  if (values.length === 0) return "-";
+  const preview = values.slice(0, 2).join("、");
+  return `${values.length} 組：${preview}${values.length > 2 ? "..." : ""}`;
+}
+
+function nextCommonSiteRowId(rows: CommonSiteRow[]) {
+  return Math.max(0, ...rows.map((row) => row.id)) + 1;
 }
 
 function isLongField(attribute: TableAttribute) {
@@ -438,6 +498,81 @@ function MediaRecordPreview(props: { contentType: string; record: CrudRecord }) 
   );
 }
 
+function CommonSitesEditor(props: {
+  rows: CommonSiteRow[];
+  onChange: (rows: CommonSiteRow[]) => void;
+}) {
+  function updateRow(id: number, key: "note" | "site", value: string) {
+    props.onChange(props.rows.map((row) => (row.id === id ? { ...row, [key]: value } : row)));
+  }
+
+  function addRow() {
+    if (props.rows.length >= COMMON_SITE_ROW_LIMIT) return;
+    props.onChange([...props.rows, { id: nextCommonSiteRowId(props.rows), site: "", note: "" }]);
+  }
+
+  function removeRow(id: number) {
+    const nextRows = props.rows.filter((row) => row.id !== id);
+    props.onChange(nextRows.length > 0 ? nextRows : [{ id: 1, site: "", note: "" }]);
+  }
+
+  function clearRows() {
+    props.onChange([{ id: 1, site: "", note: "" }]);
+  }
+
+  return (
+    <div class="common-sites-editor">
+      <div class="common-sites-heading">
+        <div>
+          <strong>站台集合</strong>
+          <p>用表格編輯常用站台與備註，儲存時會自動轉成 Contentful 的 sites / notes 物件。</p>
+        </div>
+        <div class="common-sites-actions">
+          <button class="secondary" disabled={props.rows.length >= COMMON_SITE_ROW_LIMIT} type="button" onClick={addRow}>
+            新增站台
+          </button>
+          <button class="secondary" type="button" onClick={clearRows}>
+            清空
+          </button>
+        </div>
+      </div>
+
+      <div class="common-sites-table">
+        <div class="common-sites-row common-sites-row-head">
+          <span>#</span>
+          <span>站台網址</span>
+          <span>備註 / 帳號提示</span>
+          <span>操作</span>
+        </div>
+        <For each={props.rows}>
+          {(row, index) => (
+            <div class="common-sites-row">
+              <span class="common-sites-index">{index() + 1}</span>
+              <input
+                inputMode="url"
+                placeholder="https://example.com"
+                type="url"
+                value={row.site}
+                onInput={(event) => updateRow(row.id, "site", event.currentTarget.value)}
+              />
+              <input
+                placeholder="登入方式、帳號、用途..."
+                value={row.note}
+                onInput={(event) => updateRow(row.id, "note", event.currentTarget.value)}
+              />
+              <button class="danger" type="button" onClick={() => removeRow(row.id)}>
+                移除
+              </button>
+            </div>
+          )}
+        </For>
+      </div>
+
+      <small>目前 {props.rows.length} / {COMMON_SITE_ROW_LIMIT} 組。空白列不會寫入 Contentful。</small>
+    </div>
+  );
+}
+
 export function FengbroCrudWorkspace(props: { canManage: boolean; settings: ContentfulSettings }) {
   const [activeId, setActiveId] = createSignal(CRUD_MODULES[0].id);
   const [records, setRecords] = createSignal<CrudRecord[]>([]);
@@ -447,7 +582,9 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
   const [isSaving, setIsSaving] = createSignal(false);
   const [message, setMessage] = createSignal<{ ok: boolean; text: string } | null>(null);
   const [isUploadingMedia, setIsUploadingMedia] = createSignal(false);
+  const [commonSiteRows, setCommonSiteRows] = createSignal<CommonSiteRow[]>([{ id: 1, site: "", note: "" }]);
   const [hasLoadedRecords, setHasLoadedRecords] = createSignal(false);
+  const [isEditorOpen, setIsEditorOpen] = createSignal(false);
   const [query, setQuery] = createSignal("");
   const [statusFilter, setStatusFilter] = createSignal("all");
   const [monthFilter, setMonthFilter] = createSignal("all");
@@ -456,6 +593,11 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
   const activeModule = createMemo(() => CRUD_MODULES.find((module) => module.id === activeId()));
   const activeSchema = createMemo(() => schemaByName.get(activeModule()?.contentType ?? ""));
   const activeFields = createMemo(() => activeSchema()?.attributes ?? []);
+  const editorFields = createMemo(() =>
+    activeModule()?.contentType === "commonaccount"
+      ? activeFields().filter((field) => field.key !== "sites" && field.key !== "notes")
+      : activeFields()
+  );
   const visibleColumns = createMemo(() => {
     const module = activeModule();
     if (module?.contentType === "subscription") return ["account", "price", "nextdate", "continue", "note"];
@@ -511,6 +653,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     setRecords([]);
     setHasLoadedRecords(false);
     setEditingId(null);
+    setIsEditorOpen(false);
     setQuery("");
     setStatusFilter("all");
     setMonthFilter("all");
@@ -533,10 +676,19 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
 
   function resetDraft() {
     setDraft(Object.fromEntries(activeFields().map((field) => [field.key, defaultValue(field)])));
+    setCommonSiteRows([{ id: 1, site: "", note: "" }]);
   }
 
   function startCreate() {
     setEditingId(null);
+    resetDraft();
+    setIsEditorOpen(true);
+    setMessage(null);
+  }
+
+  function closeEditor() {
+    setEditingId(null);
+    setIsEditorOpen(false);
     resetDraft();
     setMessage(null);
   }
@@ -555,6 +707,10 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
         ])
       )
     );
+    if (activeModule()?.contentType === "commonaccount") {
+      setCommonSiteRows(commonSiteRowsFromFields(record.fields.sites, record.fields.notes));
+    }
+    setIsEditorOpen(true);
     setMessage(null);
   }
 
@@ -572,6 +728,9 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
         ])
       )
     );
+    if (activeModule()?.contentType === "commonaccount") {
+      setCommonSiteRows(commonSiteRowsFromFields(record.fields.sites, record.fields.notes));
+    }
     setMessage({ ok: true, text: `已複製「${recordTitle(record)}」，調整後可新增為另一筆資料。` });
   }
 
@@ -581,6 +740,14 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
 
   function buildValues() {
     const values: Record<string, unknown> = {};
+
+    if (activeModule()?.contentType === "commonaccount") {
+      const rows = commonSiteRows().filter((row) => row.site.trim() || row.note.trim());
+      values.name = draft().name;
+      values.sites = commonSiteRowsToObject(rows, "site");
+      values.notes = commonSiteRowsToObject(rows, "note");
+      return values;
+    }
 
     for (const field of activeFields()) {
       const value = draft()[field.key];
@@ -678,6 +845,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
         text: `${entryId ? "已更新" : "已新增"} ${activeModule()?.label}。Locale: ${payload.locale}`
       });
       setEditingId(null);
+      setIsEditorOpen(false);
       resetDraft();
       await loadRecords();
     } catch (error) {
@@ -955,6 +1123,20 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                   )}
                 </Show>
 
+                <div class="editor-toggle-panel">
+                  <div>
+                    <h4>{editingId() ? "編輯資料" : "新增資料"}</h4>
+                    <p>
+                      {isEditorOpen()
+                        ? "資料表單已展開，填寫完成後可建立或更新資料。"
+                        : "新增/編輯資料預設收合，展開後才顯示各欄位。"}
+                    </p>
+                  </div>
+                  <button class={isEditorOpen() ? "secondary" : "primary"} type="button" onClick={isEditorOpen() ? closeEditor : startCreate}>
+                    {isEditorOpen() ? "收合表單" : "展開新增資料"}
+                  </button>
+                </div>
+
                 <div class="workspace-grid appwrite-workspace-grid">
                   <div class="records-panel">
                     <Show
@@ -1022,7 +1204,13 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                                                 fallback={
                                                   <Show
                                                     when={field === "continue" || field === "enabled" || field === "archived"}
-                                                    fallback={displayValue(record.fields[field])}
+                                                    fallback={
+                                                      field === "sites"
+                                                        ? displayCommonCollection(record.fields[field], "site")
+                                                        : field === "notes"
+                                                          ? displayCommonCollection(record.fields[field], "note")
+                                                          : displayValue(record.fields[field])
+                                                    }
                                                   >
                                                     <span class={`status-chip ${Boolean(record.fields[field]) ? "on" : "off"}`}>
                                                       {Boolean(record.fields[field]) ? "是" : "否"}
@@ -1076,7 +1264,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                   </div>
 
                   <form
-                    class="editor-panel"
+                    class={`editor-panel ${isEditorOpen() ? "" : "collapsed"}`}
                     onSubmit={(event) => {
                       event.preventDefault();
                       void saveRecord();
@@ -1084,6 +1272,9 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                   >
                     <div class="editor-heading">
                       <h4>{editingId() ? "編輯資料" : "新增資料"}</h4>
+                      <button class="secondary" type="button" onClick={closeEditor}>
+                        收合
+                      </button>
                       <Show when={editingId()}>
                         <button class="secondary" type="button" onClick={startCreate}>
                           取消編輯
@@ -1091,7 +1282,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                       </Show>
                     </div>
 
-                    <For each={activeFields()}>
+                    <For each={editorFields()}>
                       {(field) => (
                         <label class={isLongField(field) ? "wide-field" : ""}>
                           <span>
@@ -1132,13 +1323,22 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                       )}
                     </For>
 
+                    <Show when={activeModule()?.contentType === "commonaccount"}>
+                      <CommonSitesEditor rows={commonSiteRows()} onChange={setCommonSiteRows} />
+                    </Show>
+
                     <button class="primary" type="submit" disabled={isSaving()}>
                       {isSaving() ? "儲存中..." : editingId() ? "儲存更新" : "建立資料"}
                     </button>
                   </form>
                 </div>
 
-                <ContentfulCsvPanel canManage={props.canManage} settings={settingsPayload()} tableName={module().contentType} />
+                <ContentfulCsvPanel
+                  canManage={props.canManage}
+                  onImported={loadRecords}
+                  settings={settingsPayload()}
+                  tableName={module().contentType}
+                />
               </>
             )}
           </Show>
