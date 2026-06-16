@@ -33,6 +33,7 @@ type MediaUploadKind = "document" | "image" | "music" | "podcast" | "video";
 type MediaUploadResponse =
   | {
       ok: true;
+      partial?: boolean;
       assetId: string;
       contentTypeId: string;
       entryId: string;
@@ -891,6 +892,10 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
       const trimmed = text.replace(/\s+/g, " ").trim();
       const isHtmlError = /<!doctype html|<html|stormkit\s*-\s*errors/i.test(trimmed);
       const isTooLarge = response.status === 413 || /request entity too large/i.test(trimmed);
+      const emptySuccessMessage =
+        response.ok && !trimmed
+          ? "上傳路由回傳空內容，部署平台可能沒有正確執行 /api/contentful-upload。請重新部署後再試，或改用外部儲存 URL。"
+          : null;
       const platformMessage =
         response.status >= 500 && isHtmlError
           ? "部署平台回傳 HTML 錯誤頁，通常是檔案大小或請求限制造成。請改用較小檔案，或先上傳到外部儲存後再填 URL。"
@@ -900,6 +905,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
         message: isTooLarge
           ? "檔案太大，部署平台拒絕這次上傳。請改用較小檔案，或先把檔案上傳到外部儲存後再填 URL。"
           : (platformMessage ??
+            emptySuccessMessage ??
             `Upload failed with a non-JSON response${response.status ? ` (${response.status})` : ""}: ${(trimmed || response.statusText).slice(0, 260)}`)
       };
     }
@@ -928,28 +934,25 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     setIsUploadingMedia(true);
     setMessage(null);
     try {
-      const fileData = await fileToDataUrl(file);
+      const uploadForm = new FormData();
+      uploadForm.set("kind", kind);
+      uploadForm.set("file", file);
+      uploadForm.set("displayName", String(formData.get("displayName") ?? ""));
+      uploadForm.set("category", String(formData.get("category") ?? ""));
+      uploadForm.set("note", String(formData.get("note") ?? ""));
+      uploadForm.set("ref", String(formData.get("ref") ?? ""));
+      uploadForm.set("spaceId", props.settings.spaceId);
+      uploadForm.set("environmentId", props.settings.environmentId);
+      uploadForm.set("locale", props.settings.locale);
+      uploadForm.set("managementToken", props.settings.managementToken);
       const response = await fetch("/api/contentful-upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind,
-          fileName: file.name,
-          contentType: file.type,
-          fileData,
-          displayName: String(formData.get("displayName") ?? ""),
-          category: String(formData.get("category") ?? ""),
-          note: String(formData.get("note") ?? ""),
-          ref: String(formData.get("ref") ?? ""),
-          spaceId: props.settings.spaceId,
-          environmentId: props.settings.environmentId,
-          locale: props.settings.locale,
-          managementToken: props.settings.managementToken
-        })
+        body: uploadForm
       });
       const payload = await readMediaUploadResponse(response);
 
       if (!payload.ok) {
+        form.reset();
         setMessage({ ok: false, text: payload.message });
         return;
       }
@@ -963,6 +966,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     } catch (error) {
       setMessage({ ok: false, text: error instanceof Error ? error.message : "無法上傳媒體。" });
     } finally {
+      form.reset();
       setIsUploadingMedia(false);
     }
   }
@@ -1150,7 +1154,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                       <div class="media-upload-grid">
                         <label>
                           <span>檔案</span>
-                          <input accept={mediaAccept(kind())} name="file" required type="file" />
+                          <input accept={mediaAccept(kind())} name="file" required type="file" onChange={() => setMessage(null)} />
                         </label>
                         <label>
                           <span>名稱</span>
