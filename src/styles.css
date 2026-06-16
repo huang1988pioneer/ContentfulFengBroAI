@@ -962,3 +962,546 @@ input {
   color: #9d1c1c;
   background: #fff0ee;
 }
+
+/* Contentful settings / CRUD home */
+body:has(.shell) {
+  color: #14213d;
+  background: #f5f7fb;
+}
+
+.shell {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 48px 0;
+}
+
+.shell .hero {
+  margin-bottom: 24px;
+  border-radius: 8px;
+  padding: 28px;
+  color: #ffffff;
+  background:
+    linear-gradient(135deg, rgba(20, 33, 61, 0.94), rgba(47, 82, 123, 0.86)),
+    url("https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=80") center/cover;
+}
+
+.shell .hero-row,
+.shell .panel-heading,
+.shell .crud-header,
+.shell .editor-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.shell .eyebrow {
+  margin: 0 0 14px;
+  color: #a8dadc;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shell h1,
+.shell h2,
+.shell h3,
+.shell h4,
+.shell p {
+  margin-top: 0;
+}
+
+.shell h1 {
+  margin-bottom: 12px;
+  color: #ffffff;
+  font-size: clamp(2.2rem, 4vw, 4.7rem);
+  line-height: 0.95;
+}
+
+.shell h2 {
+  margin-bottom: 6px;
+  color: #14213d;
+  font-size: 1.35rem;
+}
+
+.shell h3,
+.shell h4 {
+  margin-bottom: 6px;
+  color: #14213d;
+}
+
+.shell .hero-copy {
+  max-width: 760px;
+  margin-bottom: 0;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 1.06rem;
+  line-height: 1.7;
+}
+
+.shell .status-pill {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.shell .panel {
+  border: 1px solid #d9e2ef;
+  border-radius: 8px;
+  padding: 28px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(20, 33, 61, 0.08);
+}
+
+.shell .panel + .panel,
+.shell .crud-panel,
+.shell .table-panel {
+  margin-top: 24px;
+}
+
+.shell .panel-heading {
+  margin-bottom: 24px;
+}
+
+.shell .panel-heading p,
+.shell .crud-header p,
+.shell .info-panel p {
+  margin-bottom: 0;
+  color: #5c6b82;
+  line-height: 1.6;
+}
+
+.shell .switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.shell .switch input,
+.shell .inline-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: #1d63ed;
+}
+
+.shell .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.shell label {
+  display: grid;
+  gap: 8px;
+  color: #25324a;
+  font-weight: 750;
+}
+
+.shell label span {
+  font-size: 0.92rem;
+}
+
+.shell .field-hint {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.shell input,
+.shell textarea,
+.shell select {
+  width: 100%;
+  border: 1px solid #cbd6e5;
+  border-radius: 8px;
+  padding: 13px 14px;
+  color: #14213d;
+  background: #f8fafc;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.shell textarea {
+  min-height: 104px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.shell input:focus,
+.shell textarea:focus,
+.shell select:focus {
+  border-color: #1d63ed;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(29, 99, 237, 0.12);
+}
+
+.shell .actions,
+.shell .toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.shell .actions {
+  margin-top: 24px;
+}
+
+.shell .env-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  margin-top: 18px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: #1e3a8a;
+  background: #eff6ff;
+  font-size: 0.9rem;
+}
+
+.shell .env-summary.warning {
+  border-color: #fed7aa;
+  color: #9a3412;
+  background: #fff7ed;
+}
+
+.shell button {
+  border: 0;
+  border-radius: 8px;
+  padding: 12px 18px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.shell button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.shell .primary {
+  color: #ffffff;
+  background: #1d63ed;
+}
+
+.shell .secondary {
+  color: #14213d;
+  background: #e8eef7;
+}
+
+.shell .danger {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.shell .result {
+  margin-top: 20px;
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 320px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-weight: 650;
+}
+
+.shell .result p {
+  margin: 6px 0;
+  line-height: 1.55;
+}
+
+.shell .success {
+  border: 1px solid #9bd7b5;
+  color: #14532d;
+  background: #effaf3;
+}
+
+.shell .error {
+  border: 1px solid #f2a6a6;
+  color: #7f1d1d;
+  background: #fff1f1;
+}
+
+.shell .crud-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.shell .module-nav {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.shell .module-button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid #d9e2ef;
+  padding: 12px;
+  color: #14213d;
+  background: #f8fafc;
+  text-align: left;
+}
+
+.shell .module-button span {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.shell .module-button.active {
+  border-color: #1d63ed;
+  color: #0f3b8f;
+  background: #eff6ff;
+}
+
+.shell .crud-content {
+  min-width: 0;
+}
+
+.shell .info-panel,
+.shell .crud-header {
+  border: 1px solid #d9e2ef;
+  border-radius: 8px;
+  padding: 18px;
+  background: #fcfdff;
+}
+
+.shell .crud-header small {
+  display: inline-block;
+  margin-top: 8px;
+  color: #64748b;
+  font-family: Consolas, "Liberation Mono", monospace;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.shell .tool-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.shell .tool-tabs button {
+  border: 1px solid #d9e2ef;
+  padding: 9px 12px;
+  color: #334155;
+  background: #f8fafc;
+}
+
+.shell .tool-tabs button.active {
+  border-color: #1d63ed;
+  color: #ffffff;
+  background: #1d63ed;
+}
+
+.shell .workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.shell .record-table-wrap {
+  overflow: auto;
+  border: 1px solid #d9e2ef;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.shell .record-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.shell .record-table th,
+.shell .record-table td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 11px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.shell .record-table th {
+  color: #475569;
+  background: #f8fafc;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.shell .record-table td small {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-family: Consolas, "Liberation Mono", monospace;
+  font-size: 0.76rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.shell .row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.shell .row-actions button,
+.shell .editor-heading button {
+  padding: 8px 10px;
+  font-size: 0.82rem;
+}
+
+.shell .editor-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d9e2ef;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fcfdff;
+}
+
+.shell .wide-field {
+  grid-column: 1 / -1;
+}
+
+.shell .inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  font-weight: 700;
+}
+
+.shell .empty-state {
+  border: 1px dashed #cbd6e5;
+  border-radius: 8px;
+  padding: 18px;
+  color: #5c6b82;
+  background: #f8fafc;
+}
+
+.shell .table-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.shell .table-card {
+  border: 1px solid #d9e2ef;
+  border-radius: 8px;
+  padding: 18px;
+  background: #fcfdff;
+}
+
+.shell .table-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shell .table-id {
+  margin: 0;
+  color: #5c6b82;
+  font-family: Consolas, "Liberation Mono", monospace;
+  font-size: 0.88rem;
+}
+
+.shell .table-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  color: #5c6b82;
+  font-size: 0.92rem;
+}
+
+.shell .table-notes {
+  margin: 12px 0 0;
+  color: #334155;
+  font-size: 0.94rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.shell .table-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.shell .badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.shell .badge.success {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.shell .badge.warning {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.shell .badge.neutral {
+  color: #334155;
+  background: #e2e8f0;
+}
+
+@media (max-width: 860px) {
+  .shell {
+    width: min(100% - 24px, 1180px);
+    padding: 24px 0;
+  }
+
+  .shell .hero,
+  .shell .panel {
+    padding: 20px;
+  }
+
+  .shell .hero-row,
+  .shell .panel-heading,
+  .shell .actions,
+  .shell .crud-header,
+  .shell .editor-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .shell .form-grid,
+  .shell .crud-layout,
+  .shell .workspace-grid,
+  .shell .table-list {
+    grid-template-columns: 1fr;
+  }
+
+  .shell .status-pill {
+    width: fit-content;
+  }
+}
