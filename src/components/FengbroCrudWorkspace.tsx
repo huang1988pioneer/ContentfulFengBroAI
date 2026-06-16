@@ -109,7 +109,7 @@ const MAIN_MODULES: CrudModule[] = [
     id: "documents",
     label: "鋒兄文件",
     contentType: "commondocument",
-    description: "文件檔案、類型、分類、封面與 hash。"
+    description: "文件檔案、來源、分類、封面與 hash。"
   },
   {
     id: "podcasts",
@@ -119,9 +119,9 @@ const MAIN_MODULES: CrudModule[] = [
   },
   {
     id: "bank",
-    label: "鋒兄銀行 (+電子票證)",
+    label: "鋒兄銀行（＋電子票證）",
     contentType: "bank",
-    description: "銀行、電子票證、帳號、提款、轉帳與活動連結。"
+    description: "銀行與電子票證餘額、活動、轉帳、提款與卡片資訊。"
   },
   {
     id: "routine",
@@ -136,25 +136,25 @@ const TOOL_MODULES: CrudModule[] = [
     id: "tool-price",
     label: "鋒兄比價",
     contentType: "toolpricehistory",
-    description: "一般商品比價快照、來源、價格與日期。"
+    description: "一般商品比價、來源、快照日、價格與建議。"
   },
   {
     id: "tool-phone",
     label: "手機比價",
     contentType: "landtophistory",
-    description: "手機商品 snapshot、品牌、來源網址與價格。"
+    description: "手機商品 snapshot、品牌、來源與價格歷史。"
   },
   {
     id: "tool-tube",
     label: "鋒兄Tube",
     contentType: "fengbrotube",
-    description: "影片頻道、影片 ID、來源網址、分類與發布日期。"
+    description: "影片頻道、video ID、分類、發布時間與啟用狀態。"
   },
   {
     id: "tool-finance",
     label: "鋒兄金融",
     contentType: "fengbrofinance",
-    description: "金融 watchlist、代號、市場、價格與更新時間。"
+    description: "金融 watchlist、標的、市場、價格與更新時間。"
   }
 ].map((item) => ({ ...item, group: "tool" as const }));
 
@@ -165,13 +165,13 @@ const NAV_MODULES: NavModule[] = [
   {
     id: "tools",
     label: "鋒兄工具",
-    description: "比價、手機比價、Tube、金融等工具子項目。",
+    description: "比價、手機比價、Tube、金融工具子項目。",
     group: "info"
   },
   {
     id: "settings",
     label: "鋒兄設定",
-    description: "使用上方 Contentful 設定區管理 Space、Token、Locale。",
+    description: "Contentful Space、Token、Locale 與初始化狀態。",
     group: "info"
   },
   {
@@ -182,10 +182,78 @@ const NAV_MODULES: NavModule[] = [
   }
 ];
 
+const FIELD_LABELS: Record<string, string> = {
+  account: "帳號",
+  activity: "活動",
+  address: "地址",
+  alternative: "替代方案",
+  amount: "數量",
+  archived: "封存",
+  brand: "品牌",
+  card: "卡片",
+  category: "分類",
+  channel: "頻道",
+  content: "內容",
+  continue: "續訂",
+  cover: "封面",
+  currency: "幣別",
+  currentPrice: "目前價格",
+  deposit: "存款",
+  enabled: "啟用",
+  file: "檔案",
+  fileSize: "檔案大小",
+  filetype: "檔案類型",
+  friendliness: "友善度",
+  hash: "Hash",
+  landtopPrice: "藍拓價格",
+  language: "語言",
+  lastRunAt: "上次執行",
+  lastStatus: "上次狀態",
+  lastSuccessAt: "上次成功",
+  lastUpdatedAt: "更新時間",
+  lastdate1: "日期 1",
+  lastdate2: "日期 2",
+  lastdate3: "日期 3",
+  link: "連結",
+  lyrics: "歌詞",
+  market: "市場",
+  method: "方法",
+  name: "名稱",
+  newDate: "日期",
+  nextdate: "下次扣款",
+  note: "備註",
+  notes: "備註集合",
+  photo: "圖片",
+  photohash: "圖片 Hash",
+  price: "價格",
+  productId: "商品 ID",
+  publishedAt: "發布時間",
+  purpose: "用途",
+  ref: "參考",
+  retentionRecommendation: "保留建議",
+  schedule: "排程",
+  shop: "商店",
+  site: "網址",
+  sites: "站台集合",
+  snapshotDate: "快照日期",
+  snapshotKey: "快照鍵",
+  source: "來源",
+  sourceUrl: "來源網址",
+  suggestedPrice: "建議價格",
+  symbol: "代號",
+  targetUrl: "目標網址",
+  title: "標題",
+  todate: "到期日",
+  transfer: "轉帳",
+  usageFrequency: "使用頻率",
+  videoId: "影片 ID",
+  withdrawals: "提款"
+};
+
 const schemaByName = new Map(TABLE_SCHEMA_LIST.map((schema) => [schema.name, schema]));
 
 function fieldLabel(key: string) {
-  return key.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase());
+  return FIELD_LABELS[key] ?? key.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase());
 }
 
 function isLongField(attribute: TableAttribute) {
@@ -206,7 +274,7 @@ function stringifyFieldValue(value: unknown) {
 
 function displayValue(value: unknown) {
   const text = stringifyFieldValue(value).replace(/\s+/g, " ").trim();
-  return text.length > 90 ? `${text.slice(0, 90)}...` : text || "-";
+  return text.length > 120 ? `${text.slice(0, 120)}...` : text || "-";
 }
 
 function isRequiredField(attribute: TableAttribute) {
@@ -229,12 +297,7 @@ function messageClass(ok: boolean) {
 
 function mediaKindForContentType(contentType?: string): MediaUploadKind | null {
   if (contentType === "commondocument") return "document";
-  if (
-    contentType === "image" ||
-    contentType === "music" ||
-    contentType === "podcast" ||
-    contentType === "video"
-  ) {
+  if (contentType === "image" || contentType === "music" || contentType === "podcast" || contentType === "video") {
     return contentType;
   }
   return null;
@@ -256,16 +319,73 @@ function normalizeMediaUrl(value: unknown) {
 }
 
 function mediaActionLabel(contentType: string) {
-  if (contentType === "image") return "顯示圖片";
-  if (contentType === "video") return "播放影片";
-  if (contentType === "music") return "播放音樂";
-  if (contentType === "podcast") return "播放播客";
-  if (contentType === "commondocument") return "預覽文件";
+  if (contentType === "image") return "開啟圖片";
+  if (contentType === "video") return "開啟影片";
+  if (contentType === "music") return "開啟音樂";
+  if (contentType === "podcast") return "開啟播客";
+  if (contentType === "commondocument") return "開啟文件";
   return "開啟檔案";
 }
 
 function isMediaContentType(contentType?: string) {
   return ["image", "video", "music", "commondocument", "podcast"].includes(contentType ?? "");
+}
+
+function toDateInputValue(value: unknown) {
+  const text = stringifyFieldValue(value).trim();
+  if (!text) return "";
+  return text.includes("T") ? text.slice(0, 10) : text;
+}
+
+function formatDate(value: unknown) {
+  const text = stringifyFieldValue(value).trim();
+  if (!text) return "-";
+  return text.includes("T") ? text.slice(0, 10) : text;
+}
+
+function monthKey(value: unknown) {
+  const date = formatDate(value);
+  return /^\d{4}-\d{2}/.test(date) ? date.slice(0, 7) : "";
+}
+
+function daysFromToday(value: unknown) {
+  const date = formatDate(value);
+  if (!/^\d{4}-\d{2}-\d{2}/.test(date)) return null;
+  const target = new Date(`${date}T00:00:00+08:00`);
+  const today = new Date();
+  const base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.ceil((target.getTime() - base.getTime()) / 86400000);
+}
+
+function formatMoney(record: CrudRecord) {
+  const rawPrice = record.fields.price ?? record.fields.deposit ?? record.fields.currentPrice ?? record.fields.landtopPrice;
+  const numeric = Number(String(rawPrice ?? "").replace(/,/g, ""));
+  if (!Number.isFinite(numeric)) return displayValue(rawPrice);
+  const currency = displayValue(record.fields.currency);
+  const prefix = currency === "USD" ? "$" : "NT$ ";
+  return `${prefix}${numeric.toLocaleString("zh-TW")}`;
+}
+
+function recordSearchText(record: CrudRecord) {
+  return [record.id, recordTitle(record), ...Object.values(record.fields).map(stringifyFieldValue)]
+    .join(" ")
+    .toLowerCase();
+}
+
+function moduleSummary(module: CrudModule, records: CrudRecord[]) {
+  if (module.contentType === "subscription") {
+    const continuing = records.filter((record) => Boolean(record.fields.continue)).length;
+    return `${records.length} 筆 / 續訂 ${continuing} 筆`;
+  }
+  if (module.contentType === "food") {
+    const amount = records.reduce((total, record) => total + (Number(record.fields.amount) || 0), 0);
+    return `${records.length} 筆 / 庫存 ${amount}`;
+  }
+  if (module.contentType === "bank") {
+    const total = records.reduce((sum, record) => sum + (Number(record.fields.deposit) || 0), 0);
+    return `${records.length} 筆 / NT$ ${total.toLocaleString("zh-TW")}`;
+  }
+  return `${records.length} records`;
 }
 
 function MediaRecordPreview(props: { contentType: string; record: CrudRecord }) {
@@ -276,7 +396,7 @@ function MediaRecordPreview(props: { contentType: string; record: CrudRecord }) 
 
   return (
     <div class="record-media-preview">
-      <Show when={fileUrl()} fallback={<div class="media-empty">尚未提供可預覽的檔案網址</div>}>
+      <Show when={fileUrl()} fallback={<div class="media-empty">尚未提供可預覽的檔案 URL。</div>}>
         {(url) => (
           <>
             <Show when={props.contentType === "image"}>
@@ -289,9 +409,7 @@ function MediaRecordPreview(props: { contentType: string; record: CrudRecord }) 
             </Show>
             <Show when={props.contentType === "music" || props.contentType === "podcast"}>
               <div class="record-audio-preview">
-                <Show when={coverUrl()}>
-                  {(cover) => <img src={cover()} alt="" loading="lazy" />}
-                </Show>
+                <Show when={coverUrl()}>{(cover) => <img src={cover()} alt="" loading="lazy" />}</Show>
                 <audio controls preload="metadata">
                   <source src={url()} type={fileType() === "-" ? undefined : fileType()} />
                 </audio>
@@ -317,10 +435,7 @@ function MediaRecordPreview(props: { contentType: string; record: CrudRecord }) 
   );
 }
 
-export function FengbroCrudWorkspace(props: {
-  canManage: boolean;
-  settings: ContentfulSettings;
-}) {
+export function FengbroCrudWorkspace(props: { canManage: boolean; settings: ContentfulSettings }) {
   const [activeId, setActiveId] = createSignal(CRUD_MODULES[0].id);
   const [records, setRecords] = createSignal<CrudRecord[]>([]);
   const [draft, setDraft] = createSignal<Record<string, unknown>>({});
@@ -329,17 +444,58 @@ export function FengbroCrudWorkspace(props: {
   const [isSaving, setIsSaving] = createSignal(false);
   const [message, setMessage] = createSignal<{ ok: boolean; text: string } | null>(null);
   const [isUploadingMedia, setIsUploadingMedia] = createSignal(false);
+  const [query, setQuery] = createSignal("");
+  const [statusFilter, setStatusFilter] = createSignal("all");
+  const [monthFilter, setMonthFilter] = createSignal("all");
 
   const activeModule = createMemo(() => CRUD_MODULES.find((module) => module.id === activeId()));
   const activeSchema = createMemo(() => schemaByName.get(activeModule()?.contentType ?? ""));
   const activeFields = createMemo(() => activeSchema()?.attributes ?? []);
-  const visibleColumns = createMemo(() => activeFields().slice(0, 4));
+  const visibleColumns = createMemo(() => {
+    const module = activeModule();
+    if (module?.contentType === "subscription") return ["account", "price", "nextdate", "continue", "note"];
+    if (module?.contentType === "food") return ["amount", "price", "shop", "todate", "photo"];
+    if (module?.contentType === "bank") return ["deposit", "withdrawals", "transfer", "card", "account"];
+    return activeFields()
+      .filter((field) => field.key !== "name" && field.key !== "title")
+      .slice(0, 5)
+      .map((field) => field.key);
+  });
   const activeMediaKind = createMemo(() => mediaKindForContentType(activeModule()?.contentType));
+  const monthOptions = createMemo(() => {
+    const months = new Set(
+      records()
+        .map((record) => monthKey(record.fields.nextdate ?? record.fields.todate ?? record.fields.lastdate1 ?? record.fields.snapshotDate))
+        .filter(Boolean)
+    );
+    return Array.from(months).sort();
+  });
+  const filteredRecords = createMemo(() => {
+    const text = query().trim().toLowerCase();
+    const status = statusFilter();
+    const month = monthFilter();
+
+    return records().filter((record) => {
+      if (text && !recordSearchText(record).includes(text)) return false;
+      if (status === "published" && !record.published) return false;
+      if (status === "draft" && record.published) return false;
+      if (status === "continuing" && !Boolean(record.fields.continue)) return false;
+      if (status === "stopped" && Boolean(record.fields.continue)) return false;
+      if (month !== "all") {
+        const recordMonth = monthKey(record.fields.nextdate ?? record.fields.todate ?? record.fields.lastdate1 ?? record.fields.snapshotDate);
+        if (recordMonth !== month) return false;
+      }
+      return true;
+    });
+  });
 
   createEffect(() => {
     activeId();
     setRecords([]);
     setEditingId(null);
+    setQuery("");
+    setStatusFilter("all");
+    setMonthFilter("all");
     resetDraft();
     setMessage(null);
   });
@@ -369,11 +525,30 @@ export function FengbroCrudWorkspace(props: {
           field.key,
           field.type === "boolean"
             ? Boolean(record.fields[field.key])
-            : stringifyFieldValue(record.fields[field.key])
+            : field.type === "datetime"
+              ? toDateInputValue(record.fields[field.key])
+              : stringifyFieldValue(record.fields[field.key])
         ])
       )
     );
     setMessage(null);
+  }
+
+  function duplicateRecord(record: CrudRecord) {
+    setEditingId(null);
+    setDraft(
+      Object.fromEntries(
+        activeFields().map((field) => [
+          field.key,
+          field.type === "boolean"
+            ? Boolean(record.fields[field.key])
+            : field.type === "datetime"
+              ? toDateInputValue(record.fields[field.key])
+              : stringifyFieldValue(record.fields[field.key])
+        ])
+      )
+    );
+    setMessage({ ok: true, text: `已複製「${recordTitle(record)}」，調整後可新增為另一筆資料。` });
   }
 
   function updateDraft(key: string, value: unknown) {
@@ -395,7 +570,7 @@ export function FengbroCrudWorkspace(props: {
         try {
           values[field.key] = JSON.parse(trimmed);
         } catch {
-          throw new Error(`${fieldLabel(field.key)} must be valid JSON.`);
+          throw new Error(`${fieldLabel(field.key)} 必須是有效 JSON。`);
         }
         continue;
       }
@@ -408,7 +583,7 @@ export function FengbroCrudWorkspace(props: {
 
   async function callCrud(action: "create" | "delete" | "list" | "update", extra = {}) {
     const module = activeModule();
-    if (!module) throw new Error("No active module selected.");
+    if (!module) throw new Error("尚未選擇資料模組。");
 
     const response = await fetch("/api/contentful-entries", {
       method: "POST",
@@ -425,7 +600,7 @@ export function FengbroCrudWorkspace(props: {
 
   async function loadRecords() {
     if (!props.canManage) {
-      setMessage({ ok: false, text: "請先填入 Space ID 與 Contentful Management Token。" });
+      setMessage({ ok: false, text: "請先輸入 Space ID 與 Contentful Management Token。" });
       return;
     }
 
@@ -440,10 +615,10 @@ export function FengbroCrudWorkspace(props: {
       setRecords(payload.items ?? []);
       setMessage({
         ok: true,
-        text: `Loaded ${payload.total ?? payload.items?.length ?? 0} records from ${payload.tableName}. Locale: ${payload.locale}`
+        text: `已載入 ${payload.total ?? payload.items?.length ?? 0} 筆 ${payload.tableName} 資料。Locale: ${payload.locale}`
       });
     } catch (error) {
-      setMessage({ ok: false, text: error instanceof Error ? error.message : "Unable to load records." });
+      setMessage({ ok: false, text: error instanceof Error ? error.message : "無法載入資料。" });
     } finally {
       setIsLoading(false);
     }
@@ -451,7 +626,7 @@ export function FengbroCrudWorkspace(props: {
 
   async function saveRecord() {
     if (!props.canManage) {
-      setMessage({ ok: false, text: "請先填入 Space ID 與 Contentful Management Token。" });
+      setMessage({ ok: false, text: "請先輸入 Space ID 與 Contentful Management Token。" });
       return;
     }
 
@@ -460,10 +635,7 @@ export function FengbroCrudWorkspace(props: {
     try {
       const values = buildValues();
       const entryId = editingId();
-      const payload = await callCrud(entryId ? "update" : "create", {
-        entryId,
-        values
-      });
+      const payload = await callCrud(entryId ? "update" : "create", { entryId, values });
 
       if (!payload.ok) {
         setMessage({ ok: false, text: payload.message });
@@ -472,20 +644,20 @@ export function FengbroCrudWorkspace(props: {
 
       setMessage({
         ok: true,
-        text: `${entryId ? "Updated" : "Created"} ${activeModule()?.label}. Locale: ${payload.locale}`
+        text: `${entryId ? "已更新" : "已新增"} ${activeModule()?.label}。Locale: ${payload.locale}`
       });
       setEditingId(null);
       resetDraft();
       await loadRecords();
     } catch (error) {
-      setMessage({ ok: false, text: error instanceof Error ? error.message : "Unable to save record." });
+      setMessage({ ok: false, text: error instanceof Error ? error.message : "無法儲存資料。" });
     } finally {
       setIsSaving(false);
     }
   }
 
   async function deleteRecord(record: CrudRecord) {
-    if (!window.confirm(`Delete ${recordTitle(record)}?`)) return;
+    if (!window.confirm(`刪除「${recordTitle(record)}」？`)) return;
 
     setMessage(null);
     try {
@@ -494,10 +666,10 @@ export function FengbroCrudWorkspace(props: {
         setMessage({ ok: false, text: payload.message });
         return;
       }
-      setMessage({ ok: true, text: `Deleted ${recordTitle(record)}.` });
+      setMessage({ ok: true, text: `已刪除「${recordTitle(record)}」。` });
       await loadRecords();
     } catch (error) {
-      setMessage({ ok: false, text: error instanceof Error ? error.message : "Unable to delete record." });
+      setMessage({ ok: false, text: error instanceof Error ? error.message : "無法刪除資料。" });
     }
   }
 
@@ -507,7 +679,7 @@ export function FengbroCrudWorkspace(props: {
     if (!kind) return;
 
     if (!props.canManage) {
-      setMessage({ ok: false, text: "請先填入 Space ID 與 Contentful Management Token。" });
+      setMessage({ ok: false, text: "請先輸入 Space ID 與 Contentful Management Token。" });
       return;
     }
 
@@ -522,10 +694,7 @@ export function FengbroCrudWorkspace(props: {
     setIsUploadingMedia(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/contentful-upload", {
-        method: "POST",
-        body: formData
-      });
+      const response = await fetch("/api/contentful-upload", { method: "POST", body: formData });
       const payload = (await response.json()) as MediaUploadResponse;
 
       if (!payload.ok) {
@@ -540,7 +709,7 @@ export function FengbroCrudWorkspace(props: {
       });
       await loadRecords();
     } catch (error) {
-      setMessage({ ok: false, text: error instanceof Error ? error.message : "Unable to upload media." });
+      setMessage({ ok: false, text: error instanceof Error ? error.message : "無法上傳媒體。" });
     } finally {
       setIsUploadingMedia(false);
     }
@@ -548,16 +717,15 @@ export function FengbroCrudWorkspace(props: {
 
   return (
     <section class="panel crud-panel" aria-labelledby="crud-title">
-      <div class="panel-heading">
+      <div class="panel-heading crud-workspace-heading">
         <div>
+          <p class="eyebrow dark">Contentful CRUD</p>
           <h2 id="crud-title">FengBro CRUD Workspace</h2>
-          <p>
-            使用 SolidStart 直接管理 Contentful entries；模組與欄位參考 fengbroaiappwrite 的 Table 架構。
-          </p>
+          <p>對齊 Appwrite 工作台：左側模組、上方篩選、表格列表、列操作與 CSV 匯入匯出。</p>
         </div>
         <div class="toolbar">
           <button class="secondary" type="button" onClick={startCreate}>
-            新增
+            新增資料
           </button>
           <button class="primary" type="button" disabled={isLoading()} onClick={loadRecords}>
             {isLoading() ? "載入中..." : "載入資料"}
@@ -565,7 +733,7 @@ export function FengbroCrudWorkspace(props: {
         </div>
       </div>
 
-      <div class="crud-layout">
+      <div class="crud-layout appwrite-like">
         <nav class="module-nav" aria-label="FengBro modules">
           <For each={NAV_MODULES}>
             {(module) => (
@@ -592,8 +760,13 @@ export function FengbroCrudWorkspace(props: {
                   setActiveId(module.id);
                 }}
               >
-                <strong>{module.label}</strong>
-                <span>{module.description}</span>
+                <span class="module-icon" aria-hidden="true">
+                  {module.id === "tools" ? "⌘" : module.id === "settings" ? "⚙" : module.id === "about" ? "i" : "▣"}
+                </span>
+                <span>
+                  <strong>{module.label}</strong>
+                  <em>{module.description}</em>
+                </span>
               </button>
             )}
           </For>
@@ -610,8 +783,8 @@ export function FengbroCrudWorkspace(props: {
                     <>
                       <h3>鋒兄關於</h3>
                       <p>
-                        此專案選型為 SolidStart，資料層使用 Contentful Delivery API 與
-                        Management API。先初始化 Table，再進入各模組 CRUD。
+                        這是 SolidStart + Contentful 版本的鋒兄資料工作台，保留 Appwrite CSV
+                        欄位格式，並用 Contentful Content Type 作為資料表。
                       </p>
                     </>
                   }
@@ -619,7 +792,7 @@ export function FengbroCrudWorkspace(props: {
                   <h3>鋒兄設定</h3>
                   <p>
                     Space ID、Environment、Locale、Delivery Token 與 Management Token
-                    請在上方設定區管理。欄位留空時會改讀部署平台的 environment variables。
+                    請在下方 Contentful Connection Settings 設定；CRUD 工作區會共用同一組連線參數。
                   </p>
                 </Show>
               </div>
@@ -628,14 +801,10 @@ export function FengbroCrudWorkspace(props: {
             {(module) => (
               <>
                 <Show when={module().group === "tool"}>
-                  <div class="tool-tabs">
+                  <div class="tool-tabs compact-tabs">
                     <For each={TOOL_MODULES}>
                       {(tool) => (
-                        <button
-                          class={activeId() === tool.id ? "active" : ""}
-                          type="button"
-                          onClick={() => setActiveId(tool.id)}
-                        >
+                        <button class={activeId() === tool.id ? "active" : ""} type="button" onClick={() => setActiveId(tool.id)}>
                           {tool.label}
                         </button>
                       )}
@@ -643,13 +812,72 @@ export function FengbroCrudWorkspace(props: {
                   </div>
                 </Show>
 
-                <div class="crud-header">
+                <div class="crud-header appwrite-header">
                   <div>
                     <h3>{module().label}</h3>
                     <p>{module().description}</p>
                     <small>Content type: {module().contentType}</small>
                   </div>
-                  <span class="badge neutral">{records().length} records</span>
+                  <span class="badge neutral">{moduleSummary(module(), records())}</span>
+                </div>
+
+                <div class="filter-bar">
+                  <div class="quick-filters">
+                    <button class={statusFilter() === "all" ? "active" : ""} type="button" onClick={() => setStatusFilter("all")}>
+                      全部
+                    </button>
+                    <button
+                      class={statusFilter() === "published" ? "active" : ""}
+                      type="button"
+                      onClick={() => setStatusFilter("published")}
+                    >
+                      已發布
+                    </button>
+                    <button class={statusFilter() === "draft" ? "active" : ""} type="button" onClick={() => setStatusFilter("draft")}>
+                      草稿
+                    </button>
+                    <Show when={module().contentType === "subscription"}>
+                      <>
+                        <button
+                          class={statusFilter() === "continuing" ? "active" : ""}
+                          type="button"
+                          onClick={() => setStatusFilter("continuing")}
+                        >
+                          續訂中
+                        </button>
+                        <button
+                          class={statusFilter() === "stopped" ? "active" : ""}
+                          type="button"
+                          onClick={() => setStatusFilter("stopped")}
+                        >
+                          不續訂
+                        </button>
+                      </>
+                    </Show>
+                  </div>
+                  <div class="advanced-filters">
+                    <input
+                      aria-label="搜尋資料"
+                      placeholder="搜尋名稱、帳號、備註或網址"
+                      value={query()}
+                      onInput={(event) => setQuery(event.currentTarget.value)}
+                    />
+                    <select aria-label="月份篩選" value={monthFilter()} onChange={(event) => setMonthFilter(event.currentTarget.value)}>
+                      <option value="all">全部月份</option>
+                      <For each={monthOptions()}>{(month) => <option value={month}>{month}</option>}</For>
+                    </select>
+                    <button
+                      class="secondary"
+                      type="button"
+                      onClick={() => {
+                        setQuery("");
+                        setStatusFilter("all");
+                        setMonthFilter("all");
+                      }}
+                    >
+                      清除篩選
+                    </button>
+                  </div>
                 </div>
 
                 <Show when={message()}>
@@ -660,20 +888,12 @@ export function FengbroCrudWorkspace(props: {
                   )}
                 </Show>
 
-                <ContentfulCsvPanel
-                  canManage={props.canManage}
-                  settings={settingsPayload()}
-                  tableName={module().contentType}
-                />
-
                 <Show when={activeMediaKind()}>
                   {(kind) => (
                     <form class="media-upload-panel" onSubmit={uploadMedia}>
                       <div>
                         <h4>上傳{module().label}</h4>
-                        <p>
-                          會先建立 Contentful Asset，再建立 {module().contentType} entry 並寫入檔案 URL、類型、hash、分類與備註。
-                        </p>
+                        <p>建立 Contentful Asset，並同步建立 {module().contentType} entry，填入檔案 URL、hash 與備註。</p>
                       </div>
                       <div class="media-upload-grid">
                         <label>
@@ -682,7 +902,7 @@ export function FengbroCrudWorkspace(props: {
                         </label>
                         <label>
                           <span>名稱</span>
-                          <input name="displayName" placeholder="留空使用檔名" />
+                          <input name="displayName" placeholder="預設使用檔名" />
                         </label>
                         <label>
                           <span>分類</span>
@@ -704,59 +924,99 @@ export function FengbroCrudWorkspace(props: {
                   )}
                 </Show>
 
-                <div class="workspace-grid">
+                <div class="workspace-grid appwrite-workspace-grid">
                   <div class="records-panel">
                     <Show
-                      when={records().length > 0}
+                      when={filteredRecords().length > 0}
                       fallback={
                         <div class="empty-state">
-                          <p>尚未載入資料，或這個 Contentful content type 目前沒有 entries。</p>
+                          <p>尚未載入資料，或目前篩選條件沒有符合的 Contentful entries。</p>
                         </div>
                       }
                     >
                       <div class="record-table-wrap">
-                        <table class="record-table">
+                        <table class="record-table appwrite-record-table">
                           <thead>
                             <tr>
-                              <th>Entry</th>
-                              <For each={visibleColumns()}>
-                                {(field) => <th>{fieldLabel(field.key)}</th>}
-                              </For>
-                              <th>Status</th>
-                              <th>Actions</th>
+                              <th class="select-col">選取</th>
+                              <th>服務</th>
+                              <For each={visibleColumns()}>{(field) => <th>{fieldLabel(field)}</th>}</For>
+                              <th>狀態</th>
+                              <th class="actions-col">操作</th>
                             </tr>
                           </thead>
                           <tbody>
-                            <For each={records()}>
+                            <For each={filteredRecords()}>
                               {(record) => (
                                 <>
-                                <tr>
-                                  <td>
-                                    <strong>{recordTitle(record)}</strong>
-                                    <small>{record.id}</small>
-                                  </td>
-                                  <For each={visibleColumns()}>
-                                    {(field) => <td>{displayValue(record.fields[field.key])}</td>}
-                                  </For>
-                                  <td>{record.published ? "published" : "draft"}</td>
-                                  <td>
-                                    <div class="row-actions">
-                                      <button class="secondary" type="button" onClick={() => startEdit(record)}>
-                                        編輯
-                                      </button>
-                                      <button class="danger" type="button" onClick={() => deleteRecord(record)}>
-                                        刪除
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
+                                  <tr>
+                                    <td class="select-col">
+                                      <input aria-label={`選取 ${recordTitle(record)}`} type="checkbox" />
+                                    </td>
+                                    <td>
+                                      <strong>
+                                        <Show when={normalizeMediaUrl(record.fields.site ?? record.fields.sourceUrl ?? record.fields.file)} fallback={recordTitle(record)}>
+                                          {(url) => (
+                                            <a href={url()} target="_blank" rel="noreferrer">
+                                              {recordTitle(record)}
+                                            </a>
+                                          )}
+                                        </Show>
+                                      </strong>
+                                      <small>{record.id}</small>
+                                    </td>
+                                    <For each={visibleColumns()}>
+                                      {(field) => (
+                                        <td>
+                                          <Show
+                                            when={field === "price" || field === "deposit" || field === "currentPrice" || field === "landtopPrice"}
+                                            fallback={
+                                              <Show
+                                                when={field === "nextdate" || field === "todate" || field === "lastdate1" || field === "snapshotDate"}
+                                                fallback={
+                                                  <Show
+                                                    when={field === "continue" || field === "enabled" || field === "archived"}
+                                                    fallback={displayValue(record.fields[field])}
+                                                  >
+                                                    <span class={`status-chip ${Boolean(record.fields[field]) ? "on" : "off"}`}>
+                                                      {Boolean(record.fields[field]) ? "是" : "否"}
+                                                    </span>
+                                                  </Show>
+                                                }
+                                              >
+                                                <span>{formatDate(record.fields[field])}</span>
+                                                <Show when={daysFromToday(record.fields[field]) !== null}>
+                                                  <small class="date-diff">{daysFromToday(record.fields[field])} 天後</small>
+                                                </Show>
+                                              </Show>
+                                            }
+                                          >
+                                            {formatMoney(record)}
+                                          </Show>
+                                        </td>
+                                      )}
+                                    </For>
+                                    <td>
+                                      <span class={`status-chip ${record.published ? "on" : "off"}`}>{record.published ? "已發布" : "草稿"}</span>
+                                    </td>
+                                    <td>
+                                      <div class="row-actions icon-actions">
+                                        <button class="secondary" type="button" title="編輯" onClick={() => startEdit(record)}>
+                                          編輯
+                                        </button>
+                                        <button class="secondary" type="button" title="複製" onClick={() => duplicateRecord(record)}>
+                                          複製
+                                        </button>
+                                        <button class="danger" type="button" title="刪除" onClick={() => deleteRecord(record)}>
+                                          刪除
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
                                   <Show when={isMediaContentType(activeModule()?.contentType)}>
                                     <tr class="media-preview-row">
-                                      <td colSpan={visibleColumns().length + 3}>
-                                        <MediaRecordPreview
-                                          contentType={activeModule()?.contentType ?? ""}
-                                          record={record}
-                                        />
+                                      <td colSpan={visibleColumns().length + 4}>
+                                        <MediaRecordPreview contentType={activeModule()?.contentType ?? ""} record={record} />
                                       </td>
                                     </tr>
                                   </Show>
@@ -799,7 +1059,7 @@ export function FengbroCrudWorkspace(props: {
                                 when={isLongField(field)}
                                 fallback={
                                   <input
-                                    type={field.type === "integer" ? "number" : "text"}
+                                    type={field.type === "integer" ? "number" : field.type === "datetime" ? "date" : "text"}
                                     value={String(draft()[field.key] ?? "")}
                                     onInput={(event) => updateDraft(field.key, event.currentTarget.value)}
                                   />
@@ -819,7 +1079,7 @@ export function FengbroCrudWorkspace(props: {
                                 checked={Boolean(draft()[field.key])}
                                 onInput={(event) => updateDraft(field.key, event.currentTarget.checked)}
                               />
-                              <span>enabled</span>
+                              <span>啟用</span>
                             </label>
                           </Show>
                         </label>
@@ -827,10 +1087,12 @@ export function FengbroCrudWorkspace(props: {
                     </For>
 
                     <button class="primary" type="submit" disabled={isSaving()}>
-                      {isSaving() ? "儲存中..." : editingId() ? "更新" : "建立"}
+                      {isSaving() ? "儲存中..." : editingId() ? "儲存更新" : "建立資料"}
                     </button>
                   </form>
                 </div>
+
+                <ContentfulCsvPanel canManage={props.canManage} settings={settingsPayload()} tableName={module().contentType} />
               </>
             )}
           </Show>
