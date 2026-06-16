@@ -29,7 +29,10 @@ type CsvResponse =
 const sampleHints = new Map([
   ["subscription", "name,site,price,nextdate,note,account,currency,continue"],
   ["food", "name,amount,todate,photo,price,shop,photohash"],
-  ["article", "title,content,category,newDate,url1,url2,url3,file1,file1name,file1type"],
+  [
+    "article",
+    "title,content,category,newDate,url1,url2,url3,file1,file1name,file1type,file2,file2name,file2type,file3,file3name,file3type"
+  ],
   ["commonaccount", "name,site01,note01,site02,note02,...,site37,note37"],
   ["bank", "name,deposit,site,address,withdrawals,transfer,activity,card,account"],
   ["routine", "name,note,lastdate1,lastdate2,lastdate3,link,photo"]

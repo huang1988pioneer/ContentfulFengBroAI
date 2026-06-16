@@ -574,6 +574,31 @@ function toContentfulField(attribute: TableAttribute) {
 }
 
 function getCsvHeaders(schema: TableSchema) {
+  const appwriteHeaders: Record<string, string[]> = {
+    article: [
+      "title",
+      "content",
+      "category",
+      "newDate",
+      "url1",
+      "url2",
+      "url3",
+      "file1",
+      "file1name",
+      "file1type",
+      "file2",
+      "file2name",
+      "file2type",
+      "file3",
+      "file3name",
+      "file3type"
+    ],
+    bank: ["name", "deposit", "site", "address", "withdrawals", "transfer", "activity", "card", "account"],
+    food: ["name", "amount", "todate", "photo", "price", "shop", "photohash"],
+    routine: ["name", "note", "lastdate1", "lastdate2", "lastdate3", "link", "photo"],
+    subscription: ["name", "site", "price", "nextdate", "note", "account", "currency", "continue"]
+  };
+
   if (schema.name === "commonaccount") {
     return [
       "name",
@@ -582,6 +607,10 @@ function getCsvHeaders(schema: TableSchema) {
         return [`site${padded}`, `note${padded}`];
       }).flat()
     ];
+  }
+
+  if (appwriteHeaders[schema.name]) {
+    return appwriteHeaders[schema.name];
   }
 
   return schema.attributes.flatMap((attribute) =>
