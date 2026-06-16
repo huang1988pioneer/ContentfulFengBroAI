@@ -75,7 +75,15 @@ export async function uploadToContentfulDirect(
   const cleanToken = normalizeToken(input.managementToken);
   
   if (!cleanToken) {
-    throw new Error("Management token is required for direct upload");
+    throw new Error(`Management token is required for direct upload. Received: ${input.managementToken ? `"${input.managementToken.slice(0, 20)}..." (length: ${input.managementToken.length})` : "undefined or empty"}`);
+  }
+  
+  if (!input.spaceId) {
+    throw new Error("Space ID is required for direct upload");
+  }
+  
+  if (!input.environmentId) {
+    throw new Error("Environment ID is required for direct upload");
   }
   
   const baseUrl = `https://api.contentful.com/spaces/${spaceId}/environments/${environmentId}`;
