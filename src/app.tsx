@@ -1,6 +1,6 @@
 import { MetaProvider, Title } from "@solidjs/meta";
-import { FileRoutes } from "@solidjs/start/router";
 import { Router } from "@solidjs/router";
+import { FileRoutes } from "@solidjs/start/router";
 import { Suspense } from "solid-js";
 import "./styles.css";
 
@@ -9,7 +9,7 @@ export default function App() {
     <Router
       root={(props) => (
         <MetaProvider>
-          <Title>{"鋒兄工具 | FengBro AI"}</Title>
+          <Title>{"FengBro Settings | Contentful"}</Title>
           <Suspense>{props.children}</Suspense>
         </MetaProvider>
       )}

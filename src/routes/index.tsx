@@ -1,7 +1,6 @@
 import { createEffect, createSignal, For, onMount, Show } from "solid-js";
 import { ContentfulCsvPanel } from "../components/ContentfulCsvPanel";
 import { FengbroCrudWorkspace } from "../components/FengbroCrudWorkspace";
-import { FengbroToolsConsole } from "../components/FengbroToolsConsole";
 
 type ContentfulSettings = {
   spaceId: string;
@@ -95,8 +94,6 @@ function tokenHint(status?: SecretStatus) {
 }
 
 export default function Home() {
-  return <FengbroToolsConsole />;
-
   const [settings, setSettings] = createSignal<ContentfulSettings>(loadSettings());
   const [serverConfig, setServerConfig] = createSignal<ServerConfigResponse | null>(null);
   const [isSaved, setIsSaved] = createSignal(false);
