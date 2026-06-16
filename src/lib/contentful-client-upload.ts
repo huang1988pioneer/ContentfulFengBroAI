@@ -38,21 +38,49 @@ export type ClientUploadResult = {
 export type UploadProgressCallback = (percent: number) => void;
 
 /**
+ * Normalize token by removing zero-width characters, quotes, and Bearer prefix
+ */
+function normalizeToken(value?: string): string {
+  if (!value) return "";
+  
+  // Remove zero-width characters
+  let cleaned = value.replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+  
+  // Remove quotes if present
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+      (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  
+  // Remove Bearer prefix if present
+  cleaned = cleaned.replace(/^Bearer\s+/i, "").trim();
+  
+  return cleaned;
+}
+
+/**
  * Upload media file directly to Contentful from browser
  */
 export async function uploadToContentfulDirect(
   input: ClientUploadInput,
   onProgress?: UploadProgressCallback
 ): Promise<ClientUploadResult> {
-  const { spaceId, environmentId, managementToken, locale, file, kind, fileName, contentType } = input;
+  const { spaceId, environmentId, locale, file, kind, fileName, contentType } = input;
   const displayName = input.displayName || fileName;
   const category = input.category || "";
   const note = input.note || "";
   const ref = input.ref || "";
   
+  // Normalize the token to remove any formatting issues
+  const cleanToken = normalizeToken(input.managementToken);
+  
+  if (!cleanToken) {
+    throw new Error("Management token is required for direct upload");
+  }
+  
   const baseUrl = `https://api.contentful.com/spaces/${spaceId}/environments/${environmentId}`;
   const headers = {
-    "Authorization": `Bearer ${managementToken}`,
+    "Authorization": `Bearer ${cleanToken}`,
     "Content-Type": "application/json"
   };
 
@@ -106,7 +134,7 @@ export async function uploadToContentfulDirect(
   const processResponse = await fetch(`${baseUrl}/assets/${assetId}/files/${locale}/process`, {
     method: "PUT",
     headers: {
-      "Authorization": `Bearer ${managementToken}`,
+      "Authorization": `Bearer ${cleanToken}`,
       "X-Contentful-Version": String(createdAsset.sys.version)
     }
   });
@@ -124,7 +152,7 @@ export async function uploadToContentfulDirect(
   while (retries > 0 && !processedAsset.fields.file[locale].url) {
     await new Promise(resolve => setTimeout(resolve, 1000));
     const getAssetResponse = await fetch(`${baseUrl}/assets/${assetId}`, {
-      headers: { "Authorization": `Bearer ${managementToken}` }
+      headers: { "Authorization": `Bearer ${cleanToken}` }
     });
     if (getAssetResponse.ok) {
       processedAsset = await getAssetResponse.json();
@@ -138,7 +166,7 @@ export async function uploadToContentfulDirect(
   const publishAssetResponse = await fetch(`${baseUrl}/assets/${assetId}/published`, {
     method: "PUT",
     headers: {
-      "Authorization": `Bearer ${managementToken}`,
+      "Authorization": `Bearer ${cleanToken}`,
       "X-Contentful-Version": String(processedAsset.sys.version)
     }
   });
@@ -207,7 +235,7 @@ export async function uploadToContentfulDirect(
   const publishEntryResponse = await fetch(`${baseUrl}/entries/${entryId}/published`, {
     method: "PUT",
     headers: {
-      "Authorization": `Bearer ${managementToken}`,
+      "Authorization": `Bearer ${cleanToken}`,
       "X-Contentful-Version": String(createdEntry.sys.version)
     }
   });
