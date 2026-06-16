@@ -47,6 +47,13 @@ type MediaUploadResponse =
     }
   | { ok: false; message: string };
 
+type UploadProgressState = {
+  active: boolean;
+  detail: string;
+  label: string;
+  percent: number;
+};
+
 type CommonSiteRow = {
   id: number;
   site: string;
@@ -375,12 +382,49 @@ function mediaAccept(kind: MediaUploadKind) {
   return ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.md,application/*,text/*";
 }
 
-function fileToDataUrl(file: File) {
+const DIRECT_UPLOAD_WARNING_BYTES = 4 * 1024 * 1024;
+
+function formatFileSize(bytes: number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
+
+function fileToDataUrl(file: File, onProgress?: (percent: number) => void) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("無法讀取檔案，請重新選擇後再上傳。"));
+    reader.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      }
+    };
     reader.onload = () => resolve(String(reader.result ?? ""));
     reader.readAsDataURL(file);
+  });
+}
+
+function postUploadJson(body: Record<string, unknown>, onProgress: (percent: number) => void) {
+  return new Promise<{ ok: boolean; status: number; statusText: string; text: string }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/contentful-upload");
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.timeout = 120000;
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      }
+    };
+    xhr.onerror = () => reject(new Error("上傳連線中斷，請確認網路後再試。"));
+    xhr.ontimeout = () => reject(new Error("上傳等待超時，影片或音樂檔可能太大，請改用較小檔案或外部 URL。"));
+    xhr.onload = () =>
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        statusText: xhr.statusText,
+        text: xhr.responseText ?? ""
+      });
+    xhr.send(JSON.stringify(body));
   });
 }
 
@@ -593,6 +637,12 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
   const [isSaving, setIsSaving] = createSignal(false);
   const [message, setMessage] = createSignal<{ ok: boolean; text: string } | null>(null);
   const [isUploadingMedia, setIsUploadingMedia] = createSignal(false);
+  const [uploadProgress, setUploadProgress] = createSignal<UploadProgressState>({
+    active: false,
+    detail: "",
+    label: "",
+    percent: 0
+  });
   const [commonSiteRows, setCommonSiteRows] = createSignal<CommonSiteRow[]>([{ id: 1, site: "", note: "" }]);
   const [hasLoadedRecords, setHasLoadedRecords] = createSignal(false);
   const [isEditorOpen, setIsEditorOpen] = createSignal(false);
@@ -885,8 +935,11 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     }
   }
 
-  async function readMediaUploadResponse(response: Response, fallback: { contentTypeId: string; fileName: string }): Promise<MediaUploadResponse> {
-    const text = await response.text();
+  function readMediaUploadResponse(
+    response: { ok: boolean; status: number; statusText: string; text: string },
+    fallback: { contentTypeId: string; fileName: string }
+  ): MediaUploadResponse {
+    const text = response.text;
     try {
       return JSON.parse(text) as MediaUploadResponse;
     } catch {
@@ -942,14 +995,40 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
       return;
     }
 
+    const fileDetail = `${file.name} (${formatFileSize(file.size)})`;
+    if (file.size > DIRECT_UPLOAD_WARNING_BYTES) {
+      setMessage({
+        ok: false,
+        text: `提醒：${fileDetail} 對部署平台來說可能太大，若失敗請改用較小檔案或先上傳到外部儲存後再填 URL。`
+      });
+    } else {
+      setMessage(null);
+    }
+
     setIsUploadingMedia(true);
-    setMessage(null);
+    setUploadProgress({
+      active: true,
+      detail: fileDetail,
+      label: "準備讀取檔案",
+      percent: 3
+    });
     try {
-      const fileData = await fileToDataUrl(file);
-      const response = await fetch("/api/contentful-upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const fileData = await fileToDataUrl(file, (percent) => {
+        setUploadProgress({
+          active: true,
+          detail: fileDetail,
+          label: "讀取檔案中",
+          percent: Math.max(3, Math.min(35, Math.round(percent * 0.35)))
+        });
+      });
+      setUploadProgress({
+        active: true,
+        detail: fileDetail,
+        label: "送出到伺服器",
+        percent: 38
+      });
+      const response = await postUploadJson(
+        {
           kind,
           fileName: file.name,
           contentType: file.type,
@@ -962,7 +1041,21 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
           environmentId: props.settings.environmentId,
           locale: props.settings.locale,
           managementToken: props.settings.managementToken
-        })
+        },
+        (percent) => {
+          setUploadProgress({
+            active: true,
+            detail: fileDetail,
+            label: "上傳資料中",
+            percent: 35 + Math.round(percent * 0.4)
+          });
+        }
+      );
+      setUploadProgress({
+        active: true,
+        detail: fileDetail,
+        label: "Contentful 處理檔案與建立 entry",
+        percent: 86
       });
       const payload = await readMediaUploadResponse(response, {
         contentTypeId: activeModule()?.contentType ?? kind,
@@ -971,11 +1064,23 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
 
       if (!payload.ok) {
         form.reset();
+        setUploadProgress({
+          active: false,
+          detail: "",
+          label: "",
+          percent: 0
+        });
         setMessage({ ok: false, text: payload.message });
         return;
       }
 
       form.reset();
+      setUploadProgress({
+        active: true,
+        detail: fileDetail,
+        label: "完成",
+        percent: 100
+      });
       setMessage({
         ok: true,
         text: payload.partial
@@ -984,10 +1089,19 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
       });
       await loadRecords();
     } catch (error) {
+      setUploadProgress({
+        active: false,
+        detail: "",
+        label: "",
+        percent: 0
+      });
       setMessage({ ok: false, text: error instanceof Error ? error.message : "無法上傳媒體。" });
     } finally {
       form.reset();
       setIsUploadingMedia(false);
+      window.setTimeout(() => {
+        setUploadProgress((current) => (current.percent >= 100 ? { active: false, detail: "", label: "", percent: 0 } : current));
+      }, 1600);
     }
   }
 
@@ -1193,6 +1307,16 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                           <textarea name="note" rows={3} />
                         </label>
                       </div>
+                      <Show when={uploadProgress().active}>
+                        <div class="media-upload-progress" role="status" aria-live="polite">
+                          <div>
+                            <strong>{uploadProgress().label}</strong>
+                            <span>{uploadProgress().percent}%</span>
+                          </div>
+                          <progress max="100" value={uploadProgress().percent} />
+                          <small>{uploadProgress().detail}</small>
+                        </div>
+                      </Show>
                       <button class="primary" disabled={isUploadingMedia()} type="submit">
                         {isUploadingMedia() ? "上傳中..." : `上傳${module().label}`}
                       </button>

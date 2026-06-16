@@ -270,7 +270,11 @@ export async function uploadFengBroMedia(input: MediaUploadInput): Promise<Media
       { ...context.params, assetId: processedAsset.sys.id },
       processedAsset
     );
-    const url = getAssetUrl(publishedAsset, locale);
+    const resolvedAsset = await waitForAssetUrl(context, publishedAsset.sys.id, locale);
+    const url = getOptionalAssetUrl(resolvedAsset ?? publishedAsset, locale);
+    const missingUrlMessage = url
+      ? undefined
+      : "Contentful asset was created, but its file URL is still processing. Check the Asset in Contentful Media and try loading records again later.";
     const createdEntry = await context.client.entry.create(
       { ...context.params, contentTypeId },
       {
@@ -281,10 +285,10 @@ export async function uploadFengBroMedia(input: MediaUploadInput): Promise<Media
           fileSize: buffer.byteLength,
           hash,
           locale,
-          note,
+          note: appendAssetNote(note, publishedAsset.sys.id, missingUrlMessage),
           ref,
           title,
-          url
+          url: url ?? ""
         })
       }
     );
@@ -302,13 +306,44 @@ export async function uploadFengBroMedia(input: MediaUploadInput): Promise<Media
       fileType: contentType,
       hash,
       locale,
-      url
+      message: missingUrlMessage,
+      partial: !url,
+      url: url ?? ""
     };
   } catch (error) {
+    const fallbackUrl = getOptionalAssetUrl(createdAsset, locale) ?? "";
+    let entryId = "";
+    try {
+      const createdEntry = await context.client.entry.create(
+        { ...context.params, contentTypeId },
+        {
+          fields: buildMediaEntryFields({
+            category,
+            contentType,
+            contentTypeId,
+            fileSize: buffer.byteLength,
+            hash,
+            locale,
+            note: appendAssetNote(note, createdAsset.sys.id, cleanManagementMessage(error)),
+            ref,
+            title,
+            url: fallbackUrl
+          })
+        }
+      );
+      const publishedEntry = await context.client.entry.publish(
+        { ...context.params, entryId: createdEntry.sys.id },
+        createdEntry
+      );
+      entryId = publishedEntry.sys.id;
+    } catch {
+      entryId = "";
+    }
+
     return {
       assetId: createdAsset.sys.id,
       contentTypeId,
-      entryId: "",
+      entryId,
       fileName,
       fileSize: buffer.byteLength,
       fileType: contentType,
@@ -316,7 +351,7 @@ export async function uploadFengBroMedia(input: MediaUploadInput): Promise<Media
       locale,
       message: cleanManagementMessage(error),
       partial: true,
-      url: getAssetUrl(createdAsset, locale)
+      url: fallbackUrl
     };
   }
 }
@@ -488,13 +523,27 @@ function validateMediaContentType(kind: MediaUploadKind, contentType: string) {
   }
 }
 
-function getAssetUrl(asset: AssetProps, locale: string) {
+function getOptionalAssetUrl(asset: AssetProps, locale: string) {
   const rawUrl = asset.fields.file?.[locale]?.url;
-  if (!rawUrl) {
-    throw new Error("Contentful asset upload succeeded but no asset URL was returned.");
-  }
+  if (!rawUrl) return null;
 
   return rawUrl.startsWith("//") ? `https:${rawUrl}` : rawUrl;
+}
+
+async function waitForAssetUrl(context: ManagementContext, assetId: string, locale: string) {
+  for (let index = 0; index < 5; index += 1) {
+    const asset = await context.client.asset.get({ ...context.params, assetId });
+    if (getOptionalAssetUrl(asset, locale)) return asset;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  return null;
+}
+
+function appendAssetNote(note: string, assetId: string, message?: string) {
+  const parts = [note, `Contentful Asset ID: ${assetId}`];
+  if (message) parts.push(`Upload note: ${message}`);
+  return parts.filter(Boolean).join("\n");
 }
 
 function buildMediaEntryFields(options: {
