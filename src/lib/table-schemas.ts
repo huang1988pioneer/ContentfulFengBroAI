@@ -273,6 +273,32 @@ export const TABLE_SCHEMAS = {
       { key: "lastSuccessAt", type: "datetime" },
       { key: "note", type: "string", size: 500 }
     ]
+  },
+  fengbrosetting: {
+    name: "fengbrosetting",
+    title: "FengBro Setting",
+    description: "FengBro application settings and preference records.",
+    attributes: [
+      { key: "name", type: "string", size: 120, required: true },
+      { key: "settingKey", type: "string", size: 120 },
+      { key: "value", type: "string", size: 2000 },
+      { key: "category", type: "string", size: 100 },
+      { key: "enabled", type: "boolean", default: true },
+      { key: "note", type: "string", size: 1000 }
+    ]
+  },
+  fengbroabout: {
+    name: "fengbroabout",
+    title: "FengBro About",
+    description: "FengBro about pages, links, and descriptive content.",
+    attributes: [
+      { key: "title", type: "string", size: 160, required: true },
+      { key: "content", type: "string", size: 4000 },
+      { key: "category", type: "string", size: 100 },
+      { key: "url", type: "url" },
+      { key: "enabled", type: "boolean", default: true },
+      { key: "note", type: "string", size: 1000 }
+    ]
   }
 } satisfies Record<string, TableSchema>;
 

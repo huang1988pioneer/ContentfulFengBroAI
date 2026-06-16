@@ -56,7 +56,7 @@ type CrudModule = {
 type NavModule =
   | CrudModule
   | {
-      id: "about" | "settings" | "tools";
+      id: "tools";
       label: string;
       description: string;
       group: "info";
@@ -128,6 +128,18 @@ const MAIN_MODULES: CrudModule[] = [
     label: "鋒兄例行",
     contentType: "routine",
     description: "例行事項、日期、連結、圖片與備註。"
+  },
+  {
+    id: "settings",
+    label: "鋒兄設定",
+    contentType: "fengbrosetting",
+    description: "鋒兄設定值、分類、啟用狀態與備註。"
+  },
+  {
+    id: "about",
+    label: "鋒兄關於",
+    contentType: "fengbroabout",
+    description: "鋒兄關於頁內容、分類、連結與啟用狀態。"
   }
 ].map((item) => ({ ...item, group: "main" as const }));
 
@@ -166,18 +178,6 @@ const NAV_MODULES: NavModule[] = [
     id: "tools",
     label: "鋒兄工具",
     description: "比價、手機比價、Tube、金融工具子項目。",
-    group: "info"
-  },
-  {
-    id: "settings",
-    label: "鋒兄設定",
-    description: "Contentful Space、Token、Locale 與初始化狀態。",
-    group: "info"
-  },
-  {
-    id: "about",
-    label: "鋒兄關於",
-    description: "SolidStart + Contentful 的鋒兄資料工作台。",
     group: "info"
   }
 ];
@@ -232,6 +232,7 @@ const FIELD_LABELS: Record<string, string> = {
   ref: "參考",
   retentionRecommendation: "保留建議",
   schedule: "排程",
+  settingKey: "設定鍵",
   shop: "商店",
   site: "網址",
   sites: "站台集合",
@@ -246,6 +247,8 @@ const FIELD_LABELS: Record<string, string> = {
   todate: "到期日",
   transfer: "轉帳",
   usageFrequency: "使用頻率",
+  url: "網址",
+  value: "設定值",
   videoId: "影片 ID",
   withdrawals: "提款"
 };
@@ -458,6 +461,8 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     if (module?.contentType === "subscription") return ["account", "price", "nextdate", "continue", "note"];
     if (module?.contentType === "food") return ["amount", "price", "shop", "todate", "photo"];
     if (module?.contentType === "bank") return ["deposit", "withdrawals", "transfer", "card", "account"];
+    if (module?.contentType === "fengbrosetting") return ["settingKey", "value", "category", "enabled", "note"];
+    if (module?.contentType === "fengbroabout") return ["content", "category", "url", "enabled", "note"];
     return activeFields()
       .filter((field) => field.key !== "name" && field.key !== "title")
       .slice(0, 5)
@@ -993,7 +998,10 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                                     </td>
                                     <td>
                                       <strong>
-                                        <Show when={normalizeMediaUrl(record.fields.site ?? record.fields.sourceUrl ?? record.fields.file)} fallback={recordTitle(record)}>
+                                        <Show
+                                          when={normalizeMediaUrl(record.fields.site ?? record.fields.sourceUrl ?? record.fields.file ?? record.fields.url)}
+                                          fallback={recordTitle(record)}
+                                        >
                                           {(url) => (
                                             <a href={url()} target="_blank" rel="noreferrer">
                                               {recordTitle(record)}
