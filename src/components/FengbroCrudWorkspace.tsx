@@ -444,9 +444,11 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
   const [isSaving, setIsSaving] = createSignal(false);
   const [message, setMessage] = createSignal<{ ok: boolean; text: string } | null>(null);
   const [isUploadingMedia, setIsUploadingMedia] = createSignal(false);
+  const [hasLoadedRecords, setHasLoadedRecords] = createSignal(false);
   const [query, setQuery] = createSignal("");
   const [statusFilter, setStatusFilter] = createSignal("all");
   const [monthFilter, setMonthFilter] = createSignal("all");
+  let loadSequence = 0;
 
   const activeModule = createMemo(() => CRUD_MODULES.find((module) => module.id === activeId()));
   const activeSchema = createMemo(() => schemaByName.get(activeModule()?.contentType ?? ""));
@@ -488,16 +490,33 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
       return true;
     });
   });
+  const autoLoadKey = createMemo(() =>
+    [
+      activeModule()?.contentType ?? "",
+      props.canManage ? "manage" : "readonly",
+      props.settings.spaceId,
+      props.settings.environmentId,
+      props.settings.managementToken ? "token" : "no-token",
+      props.settings.locale
+    ].join("|")
+  );
 
   createEffect(() => {
     activeId();
     setRecords([]);
+    setHasLoadedRecords(false);
     setEditingId(null);
     setQuery("");
     setStatusFilter("all");
     setMonthFilter("all");
     resetDraft();
     setMessage(null);
+  });
+
+  createEffect(() => {
+    autoLoadKey();
+    if (!props.canManage || !activeModule()) return;
+    void loadRecords();
   });
 
   const settingsPayload = () => ({
@@ -604,23 +623,30 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
       return;
     }
 
+    const requestId = ++loadSequence;
     setIsLoading(true);
+    setHasLoadedRecords(false);
     setMessage(null);
     try {
       const payload = await callCrud("list");
+      if (requestId !== loadSequence) return;
       if (!payload.ok) {
         setMessage({ ok: false, text: payload.message });
         return;
       }
       setRecords(payload.items ?? []);
+      setHasLoadedRecords(true);
       setMessage({
         ok: true,
         text: `已載入 ${payload.total ?? payload.items?.length ?? 0} 筆 ${payload.tableName} 資料。Locale: ${payload.locale}`
       });
     } catch (error) {
+      if (requestId !== loadSequence) return;
       setMessage({ ok: false, text: error instanceof Error ? error.message : "無法載入資料。" });
     } finally {
-      setIsLoading(false);
+      if (requestId === loadSequence) {
+        setIsLoading(false);
+      }
     }
   }
 
@@ -930,7 +956,19 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                       when={filteredRecords().length > 0}
                       fallback={
                         <div class="empty-state">
-                          <p>尚未載入資料，或目前篩選條件沒有符合的 Contentful entries。</p>
+                          <Show
+                            when={!isLoading()}
+                            fallback={<p>正在從 Contentful 載入資料...</p>}
+                          >
+                            <p>
+                              <Show
+                                when={hasLoadedRecords() && records().length === 0}
+                                fallback="目前篩選條件沒有符合的 Contentful entries。"
+                              >
+                                Contentful 目前是 0 筆資料。請先用下方 CSV import 匯入，或確認資料是否在同一個 Space / Environment / Content type。
+                              </Show>
+                            </p>
+                          </Show>
                         </div>
                       }
                     >
