@@ -308,20 +308,22 @@ export default function Home() {
         <div class="hero-row">
           <div>
             <p class="eyebrow">SolidStart Contentful Tool</p>
-            <h1>FengBro Settings</h1>
+            <h1>FengBro CRUD Workspace</h1>
             <p class="hero-copy">
-              Configure Contentful, test Delivery/Preview access, initialize Appwrite-style tables, and manage CRUD.
+              Manage FengBro subscriptions, food inventory, notes, common accounts, media, bank records, routines, tools, and Appwrite-compatible CSV.
             </p>
           </div>
           <div class="status-pill">Contentful</div>
         </div>
       </section>
 
+      <FengbroCrudWorkspace canManage={canManage()} settings={crudSettings()} />
+
       <section class="panel" aria-labelledby="settings-title">
         <div class="panel-heading">
           <div>
-            <h2 id="settings-title">Contentful Parameters</h2>
-            <p>Blank fields fall back to deployment environment variables on the server.</p>
+            <h2 id="settings-title">Contentful Connection Settings</h2>
+            <p>Use this section only to configure Contentful credentials. Blank fields fall back to deployment environment variables on the server.</p>
           </div>
           <label class="switch">
             <input
@@ -439,8 +441,6 @@ export default function Home() {
           }}
         </Show>
       </section>
-
-      <FengbroCrudWorkspace canManage={canManage()} settings={crudSettings()} />
 
       <section class="panel" aria-labelledby="csv-title">
         <div class="panel-heading">

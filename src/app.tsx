@@ -9,7 +9,7 @@ export default function App() {
     <Router
       root={(props) => (
         <MetaProvider>
-          <Title>{"FengBro Settings | Contentful"}</Title>
+          <Title>{"FengBro CRUD Workspace | Contentful"}</Title>
           <Suspense>{props.children}</Suspense>
         </MetaProvider>
       )}
