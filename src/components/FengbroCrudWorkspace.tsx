@@ -589,6 +589,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
   const [statusFilter, setStatusFilter] = createSignal("all");
   const [monthFilter, setMonthFilter] = createSignal("all");
   let loadSequence = 0;
+  let mediaFormRef: HTMLFormElement | undefined;
 
   const activeModule = createMemo(() => CRUD_MODULES.find((module) => module.id === activeId()));
   const activeSchema = createMemo(() => schemaByName.get(activeModule()?.contentType ?? ""));
@@ -658,6 +659,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     setStatusFilter("all");
     setMonthFilter("all");
     resetDraft();
+    mediaFormRef?.reset();
     setMessage(null);
   });
 
@@ -872,6 +874,22 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     }
   }
 
+  async function readMediaUploadResponse(response: Response): Promise<MediaUploadResponse> {
+    const text = await response.text();
+    try {
+      return JSON.parse(text) as MediaUploadResponse;
+    } catch {
+      const trimmed = text.replace(/\s+/g, " ").trim();
+      const isTooLarge = response.status === 413 || /request entity too large/i.test(trimmed);
+      return {
+        ok: false,
+        message: isTooLarge
+          ? "檔案太大，部署平台拒絕這次上傳。請改用較小檔案，或先把檔案上傳到外部儲存後再填 URL。"
+          : `Upload failed with a non-JSON response${response.status ? ` (${response.status})` : ""}: ${trimmed || response.statusText}`
+      };
+    }
+  }
+
   async function uploadMedia(event: SubmitEvent) {
     event.preventDefault();
     const kind = activeMediaKind();
@@ -894,7 +912,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     setMessage(null);
     try {
       const response = await fetch("/api/contentful-upload", { method: "POST", body: formData });
-      const payload = (await response.json()) as MediaUploadResponse;
+      const payload = await readMediaUploadResponse(response);
 
       if (!payload.ok) {
         setMessage({ ok: false, text: payload.message });
@@ -1089,7 +1107,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
 
                 <Show when={activeMediaKind()}>
                   {(kind) => (
-                    <form class="media-upload-panel" onSubmit={uploadMedia}>
+                    <form ref={mediaFormRef} class="media-upload-panel" onSubmit={uploadMedia}>
                       <div>
                         <h4>上傳{module().label}</h4>
                         <p>建立 Contentful Asset，並同步建立 {module().contentType} entry，填入檔案 URL、hash 與備註。</p>
