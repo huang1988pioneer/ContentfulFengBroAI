@@ -237,12 +237,15 @@ export async function uploadToContentfulDirect(
   const contentTypeId = contentTypeIdForKind(input.kind);
   const title = input.displayName || input.fileName;
   
-  // Truncate filename if too long (Contentful limit is 256 chars)
+  // Truncate filename if too long
+  // Based on testing: Chinese characters ~17 chars work reliably
+  // Use conservative limit: 50 chars (safe for mixed CN/EN/symbols)
   let fileName = input.fileName;
-  if (fileName.length > 200) {
+  if (fileName.length > 50) {
     const ext = fileName.split('.').pop() || '';
     const nameWithoutExt = fileName.substring(0, fileName.length - ext.length - 1);
-    fileName = nameWithoutExt.substring(0, 200 - ext.length - 1) + '.' + ext;
+    const maxNameLength = 50 - ext.length - 1; // -1 for the dot
+    fileName = nameWithoutExt.substring(0, maxNameLength) + '.' + ext;
   }
   
   const baseUrl = `${CONTENTFUL_API}/spaces/${input.spaceId}/environments/${environmentId}`;
