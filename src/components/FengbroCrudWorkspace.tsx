@@ -647,6 +647,14 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     if (module?.contentType === "bank") return ["deposit", "withdrawals", "transfer", "card", "account"];
     if (module?.contentType === "fengbrosetting") return ["settingKey", "value", "category", "enabled", "note"];
     if (module?.contentType === "fengbroabout") return ["content", "category", "url", "enabled", "note"];
+    
+    // Media content types: exclude file URL field
+    if (module?.contentType === "image") return ["category", "cover", "hash", "note", "ref"];
+    if (module?.contentType === "video") return ["category", "cover", "fileSize", "note", "ref"];
+    if (module?.contentType === "music") return ["category", "cover", "language", "lyrics", "note"];
+    if (module?.contentType === "podcast") return ["category", "cover", "note", "ref", "hash"];
+    if (module?.contentType === "commondocument") return ["category", "cover", "hash", "note", "ref"];
+    
     return activeFields()
       .filter((field) => field.key !== "name" && field.key !== "title")
       .slice(0, 5)
