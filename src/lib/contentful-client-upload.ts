@@ -152,14 +152,13 @@ function uploadToContentfulUploadApi(
   url: string,
   token: string,
   file: File,
-  contentType: string,
   onProgress: (percent: number) => void
 ) {
   return new Promise<{ sys: ContentfulSys }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    xhr.setRequestHeader("Content-Type", contentType || "application/octet-stream");
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
     xhr.timeout = 15 * 60 * 1000;
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
@@ -220,7 +219,6 @@ export async function uploadToContentfulDirect(
     `${CONTENTFUL_UPLOAD_API}/spaces/${input.spaceId}/uploads`,
     token,
     input.file,
-    contentType,
     (percent) => onProgress?.(4 + Math.round(percent * 0.2), "Uploading file")
   );
 
