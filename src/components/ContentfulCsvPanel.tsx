@@ -70,7 +70,29 @@ export function ContentfulCsvPanel(props: CsvPanelProps) {
         tableName: tableName()
       })
     });
-    return (await response.json()) as CsvResponse;
+    
+    // Check if response is OK before parsing
+    if (!response.ok) {
+      const text = await response.text();
+      try {
+        const json = JSON.parse(text) as CsvResponse;
+        return json;
+      } catch {
+        throw new Error(`Server error (${response.status}): ${text.slice(0, 200)}`);
+      }
+    }
+    
+    // Parse successful response
+    const text = await response.text();
+    if (!text.trim()) {
+      throw new Error("Server returned empty response");
+    }
+    
+    try {
+      return JSON.parse(text) as CsvResponse;
+    } catch (parseError) {
+      throw new Error(`Invalid JSON response: ${text.slice(0, 200)}`);
+    }
   }
 
   async function importCsv() {

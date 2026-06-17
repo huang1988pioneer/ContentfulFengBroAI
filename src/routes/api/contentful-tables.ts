@@ -134,8 +134,17 @@ export async function POST(event: APIEvent) {
     }
 
     if (action === "importCsv") {
-      const result = await importContentfulCsv(settings, body.tableName, String(body.csvText ?? ""));
-      return jsonResponse({ ok: true, ...result });
+      try {
+        const result = await importContentfulCsv(settings, body.tableName, String(body.csvText ?? ""));
+        return jsonResponse({ ok: true, ...result });
+      } catch (importError) {
+        // Provide detailed error for CSV import failures
+        const errorMessage = importError instanceof Error ? importError.message : String(importError);
+        return jsonResponse({
+          ok: false,
+          message: `CSV import failed: ${errorMessage.slice(0, 500)}`
+        }, 400);
+      }
     }
 
     if (action === "exportCsv") {
