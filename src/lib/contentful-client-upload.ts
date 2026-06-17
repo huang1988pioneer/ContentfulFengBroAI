@@ -97,12 +97,22 @@ function buildMediaEntryFields(options: {
     ref: { [options.locale]: options.ref }
   };
 
-  if (options.contentTypeId === "image") fields.cover = { [options.locale]: false };
+  if (options.contentTypeId === "image") {
+    fields.cover = { [options.locale]: false };
+  }
+  
   if (options.contentTypeId === "video") {
     fields.cover = { [options.locale]: "" };
     fields.fileSize = { [options.locale]: options.fileSize };
   }
-  if (["commondocument", "music", "podcast"].includes(options.contentTypeId)) {
+  
+  if (options.contentTypeId === "music") {
+    fields.cover = { [options.locale]: "" };
+    fields.lyrics = { [options.locale]: "" };
+    fields.language = { [options.locale]: "" };
+  }
+  
+  if (["commondocument", "podcast"].includes(options.contentTypeId)) {
     fields.cover = { [options.locale]: "" };
   }
 
@@ -226,6 +236,7 @@ export async function uploadToContentfulDirect(
   const createAssetResponse = await fetch(`${baseUrl}/assets`, {
     body: JSON.stringify({
       fields: {
+        title: { [locale]: title },
         description: { [locale]: input.note || "" },
         file: {
           [locale]: {
@@ -233,14 +244,13 @@ export async function uploadToContentfulDirect(
             fileName: input.fileName,
             uploadFrom: {
               sys: {
-                id: upload.sys.id,
+                type: "Link",
                 linkType: "Upload",
-                type: "Link"
+                id: upload.sys.id
               }
             }
           }
-        },
-        title: { [locale]: title }
+        }
       }
     }),
     headers: jsonHeaders,
