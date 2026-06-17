@@ -30,7 +30,26 @@ export type ClientUploadResult = {
   url: string;
 };
 
-export type UploadProgressCallback = (percent: number) => void;
+export type UploadProgressCallback = (percent: number, label?: string) => void;
+
+type ContentfulSys = {
+  id: string;
+  version?: number;
+};
+
+type ContentfulAsset = {
+  fields?: {
+    file?: Record<string, { url?: string }>;
+  };
+  sys: ContentfulSys;
+};
+
+type ContentfulEntry = {
+  sys: ContentfulSys;
+};
+
+const CONTENTFUL_API = "https://api.contentful.com";
+const CONTENTFUL_UPLOAD_API = "https://upload.contentful.com";
 
 function normalizeToken(value?: string) {
   return (value ?? "")
@@ -44,8 +63,9 @@ function contentTypeIdForKind(kind: string) {
   return kind === "document" ? "commondocument" : kind;
 }
 
-function assetUrl(asset: any, locale: string) {
+function assetUrl(asset: ContentfulAsset | null, locale: string) {
   const raw = asset?.fields?.file?.[locale]?.url ?? "";
+  if (!raw) return "";
   return raw.startsWith("//") ? `https:${raw}` : raw;
 }
 
@@ -77,15 +97,11 @@ function buildMediaEntryFields(options: {
     ref: { [options.locale]: options.ref }
   };
 
-  if (options.contentTypeId === "image") {
-    fields.cover = { [options.locale]: false };
-  }
-
+  if (options.contentTypeId === "image") fields.cover = { [options.locale]: false };
   if (options.contentTypeId === "video") {
     fields.cover = { [options.locale]: "" };
     fields.fileSize = { [options.locale]: options.fileSize };
   }
-
   if (["commondocument", "music", "podcast"].includes(options.contentTypeId)) {
     fields.cover = { [options.locale]: "" };
   }
@@ -101,8 +117,85 @@ async function calculateFileHash(file: File) {
     .join("");
 }
 
-async function readError(response: Response) {
-  return (await response.text()).replace(/\s+/g, " ").slice(0, 220);
+async function readResponseText(response: Response) {
+  return (await response.text()).replace(/\s+/g, " ").trim();
+}
+
+function compactContentfulError(prefix: string, response: Response, detail: string) {
+  const safeDetail = detail || response.statusText || String(response.status);
+  return `${prefix} (${response.status}): ${safeDetail.slice(0, 260)}`;
+}
+
+async function readJson<T>(response: Response, prefix: string): Promise<T> {
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(compactContentfulError(prefix, response, text.replace(/\s+/g, " ").trim()));
+  }
+
+  if (!text.trim()) {
+    throw new Error(`${prefix}: Contentful returned an empty response.`);
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`${prefix}: Contentful returned a non-JSON response.`);
+  }
+}
+
+async function requestOk(response: Response, prefix: string) {
+  if (response.ok) return;
+  throw new Error(compactContentfulError(prefix, response, await readResponseText(response)));
+}
+
+function uploadToContentfulUploadApi(
+  url: string,
+  token: string,
+  file: File,
+  contentType: string,
+  onProgress: (percent: number) => void
+) {
+  return new Promise<{ sys: ContentfulSys }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("Content-Type", contentType || "application/octet-stream");
+    xhr.timeout = 15 * 60 * 1000;
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+    xhr.onerror = () => reject(new Error("上傳到 Contentful 的連線中斷，請確認網路後再試。"));
+    xhr.ontimeout = () => reject(new Error("上傳等待逾時，請改用較小檔案或稍後再試。"));
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`Contentful Upload API 拒絕檔案 (${xhr.status}): ${xhr.responseText || xhr.statusText}`));
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(xhr.responseText || "{}") as { sys: ContentfulSys });
+      } catch {
+        reject(new Error("Contentful Upload API 回傳格式不正確，請重新上傳。"));
+      }
+    };
+    xhr.send(file);
+  });
+}
+
+async function pollAssetForUrl(baseUrl: string, headers: HeadersInit, assetId: string, locale: string, onProgress?: UploadProgressCallback) {
+  let latest: ContentfulAsset | null = null;
+
+  for (let index = 0; index < 18; index += 1) {
+    const response = await fetch(`${baseUrl}/assets/${assetId}`, { headers });
+    if (response.ok) {
+      latest = (await response.json()) as ContentfulAsset;
+      if (assetUrl(latest, locale)) return latest;
+    }
+    onProgress?.(70 + Math.min(index, 18), "Contentful processing");
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  return latest;
 }
 
 export async function uploadToContentfulDirect(
@@ -110,17 +203,28 @@ export async function uploadToContentfulDirect(
   onProgress?: UploadProgressCallback
 ): Promise<ClientUploadResult> {
   const token = normalizeToken(input.managementToken);
-  if (!token) throw new Error("上傳設定尚未完成，請稍後再試。");
+  if (!token) throw new Error("缺少 Contentful Management Token，請先在鋒兄設定填入或部署環境變數。");
+  if (!input.spaceId) throw new Error("缺少 Contentful Space ID。");
 
+  const environmentId = input.environmentId || "master";
   const locale = input.locale || "zh-TW";
   const contentType = input.contentType || "application/octet-stream";
   const contentTypeId = contentTypeIdForKind(input.kind);
   const title = input.displayName || input.fileName;
-  const baseUrl = `https://api.contentful.com/spaces/${input.spaceId}/environments/${input.environmentId || "master"}`;
+  const baseUrl = `${CONTENTFUL_API}/spaces/${input.spaceId}/environments/${environmentId}`;
   const authHeaders = { Authorization: `Bearer ${token}` };
-  const jsonHeaders = { ...authHeaders, "Content-Type": "application/json" };
+  const jsonHeaders = { ...authHeaders, "Content-Type": "application/vnd.contentful.management.v1+json" };
 
-  onProgress?.(8);
+  onProgress?.(4, "Preparing upload");
+  const upload = await uploadToContentfulUploadApi(
+    `${CONTENTFUL_UPLOAD_API}/spaces/${input.spaceId}/uploads`,
+    token,
+    input.file,
+    contentType,
+    (percent) => onProgress?.(4 + Math.round(percent * 0.2), "Uploading file")
+  );
+
+  onProgress?.(24, "Creating asset");
   const createAssetResponse = await fetch(`${baseUrl}/assets`, {
     body: JSON.stringify({
       fields: {
@@ -128,7 +232,14 @@ export async function uploadToContentfulDirect(
         file: {
           [locale]: {
             contentType,
-            fileName: input.fileName
+            fileName: input.fileName,
+            uploadFrom: {
+              sys: {
+                id: upload.sys.id,
+                linkType: "Upload",
+                type: "Link"
+              }
+            }
           }
         },
         title: { [locale]: title }
@@ -137,60 +248,41 @@ export async function uploadToContentfulDirect(
     headers: jsonHeaders,
     method: "POST"
   });
-
-  if (!createAssetResponse.ok) {
-    throw new Error(`無法建立 Contentful Asset：${await readError(createAssetResponse)}`);
-  }
-
-  const createdAsset = await createAssetResponse.json();
+  const createdAsset = await readJson<ContentfulAsset>(createAssetResponse, "建立 Contentful Asset 失敗");
   const assetId = createdAsset.sys.id;
-  const uploadUrl = createdAsset.fields.file?.[locale]?.upload;
-  if (!uploadUrl) throw new Error("Contentful 沒有回傳上傳位置，請重新上傳。");
 
-  onProgress?.(18);
-  await uploadFileToContentful(uploadUrl.startsWith("//") ? `https:${uploadUrl}` : uploadUrl, input.file, contentType, (percent) => {
-    onProgress?.(18 + Math.round(percent * 0.47));
-  });
-
-  onProgress?.(66);
+  onProgress?.(40, "Processing asset");
   const processResponse = await fetch(`${baseUrl}/assets/${assetId}/files/${locale}/process`, {
     headers: {
       ...authHeaders,
-      "X-Contentful-Version": String(createdAsset.sys.version)
+      "X-Contentful-Version": String(createdAsset.sys.version ?? 1)
     },
     method: "PUT"
   });
+  await requestOk(processResponse, "Contentful 處理檔案失敗");
 
-  if (!processResponse.ok) {
-    throw new Error(`檔案已上傳，但 Contentful 處理失敗：${await readError(processResponse)}`);
-  }
+  const processedAsset = await pollAssetForUrl(baseUrl, authHeaders, assetId, locale, onProgress);
+  const latestVersion = processedAsset?.sys.version ?? createdAsset.sys.version ?? 1;
 
-  let processedAsset = await processResponse.json();
-  for (let index = 0; index < 12 && !assetUrl(processedAsset, locale); index += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    const assetResponse = await fetch(`${baseUrl}/assets/${assetId}`, { headers: authHeaders });
-    if (assetResponse.ok) processedAsset = await assetResponse.json();
-    onProgress?.(70 + Math.min(index * 2, 12));
-  }
-
-  onProgress?.(84);
+  onProgress?.(86, "Publishing asset");
   const publishAssetResponse = await fetch(`${baseUrl}/assets/${assetId}/published`, {
     headers: {
       ...authHeaders,
-      "X-Contentful-Version": String(processedAsset.sys.version)
+      "X-Contentful-Version": String(latestVersion)
     },
     method: "PUT"
   });
+  await requestOk(publishAssetResponse, "發布 Contentful Asset 失敗");
 
-  if (!publishAssetResponse.ok) {
-    throw new Error(`檔案已上傳，但發布 Asset 失敗：${await readError(publishAssetResponse)}`);
-  }
-
-  const publishedAsset = await publishAssetResponse.json();
+  const publishedAssetResponse = await fetch(`${baseUrl}/assets/${assetId}`, { headers: authHeaders });
+  const publishedAsset = publishedAssetResponse.ok ? ((await publishedAssetResponse.json()) as ContentfulAsset) : processedAsset;
   const url = assetUrl(publishedAsset, locale);
   const hash = await calculateFileHash(input.file);
+  const missingUrlMessage = url
+    ? undefined
+    : "Asset 已建立，但 Contentful 尚未產生檔案 URL；資料會先建立，稍後可重新載入確認。";
 
-  onProgress?.(90);
+  onProgress?.(92, "Creating entry");
   const createEntryResponse = await fetch(`${baseUrl}/entries`, {
     body: JSON.stringify({
       fields: buildMediaEntryFields({
@@ -200,7 +292,7 @@ export async function uploadToContentfulDirect(
         fileSize: input.file.size,
         hash,
         locale,
-        note: appendAssetNote(input.note || "", assetId),
+        note: appendAssetNote(input.note || "", assetId, missingUrlMessage),
         ref: input.ref || "",
         title,
         url
@@ -223,17 +315,19 @@ export async function uploadToContentfulDirect(
       fileType: contentType,
       hash,
       locale,
-      message: `檔案已上傳，但建立資料失敗：${await readError(createEntryResponse)}`,
+      message: `檔案已上傳，但建立資料失敗：${await readResponseText(createEntryResponse)}`,
       partial: true,
       url
     };
   }
 
-  const createdEntry = await createEntryResponse.json();
+  const createdEntry = (await createEntryResponse.json()) as ContentfulEntry;
+
+  onProgress?.(97, "Publishing entry");
   const publishEntryResponse = await fetch(`${baseUrl}/entries/${createdEntry.sys.id}/published`, {
     headers: {
       ...authHeaders,
-      "X-Contentful-Version": String(createdEntry.sys.version)
+      "X-Contentful-Version": String(createdEntry.sys.version ?? 1)
     },
     method: "PUT"
   });
@@ -248,13 +342,13 @@ export async function uploadToContentfulDirect(
       fileType: contentType,
       hash,
       locale,
-      message: "檔案與資料已建立，但發布資料失敗。",
+      message: `資料已建立，但發布失敗：${await readResponseText(publishEntryResponse)}`,
       partial: true,
       url
     };
   }
 
-  onProgress?.(100);
+  onProgress?.(100, "Complete");
   return {
     assetId,
     contentTypeId,
@@ -264,25 +358,8 @@ export async function uploadToContentfulDirect(
     fileType: contentType,
     hash,
     locale,
+    message: missingUrlMessage,
+    partial: Boolean(missingUrlMessage),
     url
   };
-}
-
-function uploadFileToContentful(url: string, file: File, contentType: string, onProgress: (percent: number) => void) {
-  return new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", contentType || "application/octet-stream");
-    xhr.timeout = 15 * 60 * 1000;
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-    };
-    xhr.onerror = () => reject(new Error("上傳到 Contentful 時連線中斷，請重新上傳。"));
-    xhr.ontimeout = () => reject(new Error("上傳等待超時，請確認網路後重新上傳。"));
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`上傳到 Contentful 失敗：${xhr.statusText || xhr.status}`));
-    };
-    xhr.send(file);
-  });
 }

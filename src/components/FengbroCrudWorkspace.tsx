@@ -375,6 +375,15 @@ function formatFileSize(bytes: number) {
 }
 
 async function loadDirectUploadSettings(fallback: ContentfulSettings) {
+  if (fallback.spaceId && fallback.managementToken) {
+    return {
+      environmentId: fallback.environmentId || "master",
+      locale: fallback.locale || "zh-TW",
+      managementToken: fallback.managementToken,
+      spaceId: fallback.spaceId
+    };
+  }
+
   const response = await fetch("/api/contentful-direct-config", {
     headers: { Accept: "application/json" }
   });
@@ -970,7 +979,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
           note: String(formData.get("note") ?? ""),
           ref: String(formData.get("ref") ?? "")
         },
-        (percent) => {
+        (percent, progressLabel) => {
           let label = "上傳到 Contentful";
           if (percent >= 90) label = "建立資料";
           else if (percent >= 66) label = "Contentful 處理檔案";
@@ -978,7 +987,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
           setUploadProgress({
             active: true,
             detail: fileDetail,
-            label,
+            label: progressLabel ?? label,
             percent
           });
         }
