@@ -237,15 +237,30 @@ export async function uploadToContentfulDirect(
   const contentTypeId = contentTypeIdForKind(input.kind);
   const title = input.displayName || input.fileName;
   
-  // Truncate filename if too long
-  // Based on testing: Chinese characters ~17 chars work reliably
-  // Use conservative limit: 50 chars (safe for mixed CN/EN/symbols)
+  // Truncate filename based on Chinese character count
+  // Testing shows: max 17 Chinese characters work reliably
+  // ASCII/symbols don't count toward this limit
   let fileName = input.fileName;
-  if (fileName.length > 50) {
-    const ext = fileName.split('.').pop() || '';
-    const nameWithoutExt = fileName.substring(0, fileName.length - ext.length - 1);
-    const maxNameLength = 50 - ext.length - 1; // -1 for the dot
-    fileName = nameWithoutExt.substring(0, maxNameLength) + '.' + ext;
+  const ext = fileName.split('.').pop() || '';
+  const nameWithoutExt = fileName.substring(0, fileName.length - ext.length - 1);
+  
+  // Count Chinese characters (CJK Unified Ideographs + Extensions)
+  const chineseCharCount = (nameWithoutExt.match(/[\u4e00-\u9fff\u3400-\u4dbf\u{20000}-\u{2a6df}\u{2a700}-\u{2b73f}\u{2b740}-\u{2b81f}\u{2b820}-\u{2ceaf}\uf900-\ufaff\u3300-\u33ff]/gu) || []).length;
+  
+  if (chineseCharCount > 17) {
+    // Too many Chinese characters, truncate intelligently
+    let truncated = '';
+    let chCount = 0;
+    
+    for (const char of nameWithoutExt) {
+      if (/[\u4e00-\u9fff\u3400-\u4dbf\u{20000}-\u{2a6df}\u{2a700}-\u{2b73f}\u{2b740}-\u{2b81f}\u{2b820}-\u{2ceaf}\uf900-\ufaff\u3300-\u33ff]/u.test(char)) {
+        if (chCount >= 17) break;
+        chCount++;
+      }
+      truncated += char;
+    }
+    
+    fileName = truncated + '.' + ext;
   }
   
   const baseUrl = `${CONTENTFUL_API}/spaces/${input.spaceId}/environments/${environmentId}`;
