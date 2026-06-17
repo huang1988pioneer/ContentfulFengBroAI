@@ -1,7 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { ContentfulCsvPanel } from "./ContentfulCsvPanel";
 import { TABLE_SCHEMA_LIST, type TableAttribute } from "../lib/table-schemas";
-import { uploadToContentfulDirect } from "../lib/contentful-client-upload";
 
 type ContentfulSettings = {
   spaceId: string;
@@ -652,6 +651,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
   const [monthFilter, setMonthFilter] = createSignal("all");
   let loadSequence = 0;
   let mediaFormRef: HTMLFormElement | undefined;
+  let contentTopRef: HTMLDivElement | undefined;
 
   const activeModule = createMemo(() => CRUD_MODULES.find((module) => module.id === activeId()));
   const activeSchema = createMemo(() => schemaByName.get(activeModule()?.contentType ?? ""));
@@ -723,6 +723,10 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     resetDraft();
     mediaFormRef?.reset();
     setMessage(null);
+    requestAnimationFrame(() => {
+      contentTopRef?.scrollIntoView({ block: "start" });
+      contentTopRef?.focus({ preventScroll: true });
+    });
   });
 
   createEffect(() => {
@@ -1008,37 +1012,66 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     });
 
     try {
-      // Use direct upload to Contentful (bypasses server-side API limits)
-      const result = await uploadToContentfulDirect(
+      const fileData = await fileToDataUrl(file, (percent) => {
+        setUploadProgress({
+          active: true,
+          detail: fileDetail,
+          label: "讀取檔案中",
+          percent: Math.max(3, Math.min(35, Math.round(percent * 0.35)))
+        });
+      });
+      setUploadProgress({
+        active: true,
+        detail: fileDetail,
+        label: "送出到伺服器",
+        percent: 38
+      });
+      const response = await postUploadJson(
         {
-          spaceId: props.settings.spaceId,
-          environmentId: props.settings.environmentId,
-          locale: props.settings.locale,
-          managementToken: props.settings.managementToken,
           kind,
           fileName: file.name,
           contentType: file.type,
-          file,
+          fileData,
           displayName: String(formData.get("displayName") ?? ""),
           category: String(formData.get("category") ?? ""),
           note: String(formData.get("note") ?? ""),
-          ref: String(formData.get("ref") ?? "")
+          ref: String(formData.get("ref") ?? ""),
+          spaceId: props.settings.spaceId,
+          environmentId: props.settings.environmentId,
+          locale: props.settings.locale,
+          managementToken: props.settings.managementToken
         },
         (percent) => {
-          let label = "上傳檔案中";
-          if (percent >= 70) label = "處理並建立 entry";
-          else if (percent >= 60) label = "等待 Contentful 處理";
-          else if (percent >= 25) label = "上傳檔案到 Contentful";
-          else if (percent >= 10) label = "建立 Asset";
-          
           setUploadProgress({
             active: true,
             detail: fileDetail,
-            label,
-            percent
+            label: "上傳資料中",
+            percent: 35 + Math.round(percent * 0.4)
           });
         }
       );
+      setUploadProgress({
+        active: true,
+        detail: fileDetail,
+        label: "Contentful 處理檔案與建立 entry",
+        percent: 86
+      });
+      const result = readMediaUploadResponse(response, {
+        contentTypeId: activeModule()?.contentType ?? kind,
+        fileName: file.name
+      });
+
+      if (!result.ok) {
+        form.reset();
+        setUploadProgress({
+          active: false,
+          detail: "",
+          label: "",
+          percent: 0
+        });
+        setMessage({ ok: false, text: result.message });
+        return;
+      }
 
       form.reset();
       setUploadProgress({
@@ -1156,6 +1189,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
           >
             {(module) => (
               <>
+                <div ref={contentTopRef} class="crud-content-anchor" tabIndex={-1} />
                 <Show when={module().group === "tool"}>
                   <div class="tool-tabs compact-tabs">
                     <For each={TOOL_MODULES}>

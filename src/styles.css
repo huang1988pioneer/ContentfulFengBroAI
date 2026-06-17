@@ -1273,6 +1273,11 @@ body:has(.shell) {
   min-width: 0;
 }
 
+.shell .crud-content-anchor {
+  height: 0;
+  outline: none;
+}
+
 .shell .info-panel,
 .shell .crud-header {
   border: 1px solid #d9e2ef;
