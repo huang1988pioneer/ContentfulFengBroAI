@@ -202,61 +202,81 @@ export function ContentfulCsvPanel(props: CsvPanelProps) {
   }
   
   function parseCsvLocally(text: string): Array<Record<string, string>> {
-    const lines = text.trim().replace(/^\uFEFF/, "").split(/\r?\n/);
-    if (lines.length < 2) return [];
+    // Use the same robust CSV parser as the backend
+    const cleanText = text.trim().replace(/^\uFEFF/, "");
+    const parsedRows = parseCsvRows(cleanText);
     
-    const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
-    const rows: Array<Record<string, string>> = [];
+    if (parsedRows.length < 2) return [];
     
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      
-      const values = parseCsvLine(line);
-      if (values.some(v => v.trim())) {
-        const row: Record<string, string> = {};
-        headers.forEach((header, index) => {
-          row[header] = values[index] || "";
-        });
-        rows.push(row);
-      }
+    const [headers, ...dataRows] = parsedRows;
+    
+    if (!headers || headers.length === 0) {
+      return [];
     }
     
-    return rows;
+    return dataRows
+      .filter((row) => row.some((value) => value.trim().length > 0))
+      .map((row) =>
+        Object.fromEntries(
+          headers.map((header, index) => [header.trim(), row[index] ?? ""])
+        )
+      );
   }
   
-  function parseCsvLine(line: string): string[] {
-    const values: string[] = [];
-    let current = "";
+  function parseCsvRows(text: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = "";
     let inQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      const nextChar = line[i + 1];
-      
+
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index];
+      const nextChar = text[index + 1];
+
       if (inQuotes) {
         if (char === '"' && nextChar === '"') {
-          current += '"';
-          i++;
+          field += '"';
+          index += 1;
         } else if (char === '"') {
           inQuotes = false;
         } else {
-          current += char;
+          field += char;
         }
-      } else {
-        if (char === '"') {
-          inQuotes = true;
-        } else if (char === ',') {
-          values.push(current.trim());
-          current = "";
-        } else {
-          current += char;
-        }
+        continue;
       }
+
+      if (char === '"') {
+        inQuotes = true;
+        continue;
+      }
+
+      if (char === ',') {
+        row.push(field);
+        field = "";
+        continue;
+      }
+
+      if (char === '\n') {
+        row.push(stripTrailingCarriageReturn(field));
+        rows.push(row);
+        row = [];
+        field = "";
+        continue;
+      }
+
+      field += char;
     }
-    
-    values.push(current.trim());
-    return values;
+
+    if (field.length > 0 || row.length > 0) {
+      row.push(stripTrailingCarriageReturn(field));
+      rows.push(row);
+    }
+
+    return rows;
+  }
+  
+  function stripTrailingCarriageReturn(value: string): string {
+    return value.endsWith('\r') ? value.slice(0, -1) : value;
   }
 
   async function exportCsv() {
