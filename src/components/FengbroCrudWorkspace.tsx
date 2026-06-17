@@ -618,6 +618,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
   const [isUploadingMedia, setIsUploadingMedia] = createSignal(false);
   const [isDeletingSelected, setIsDeletingSelected] = createSignal(false);
   const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
+  const [deleteProgress, setDeleteProgress] = createSignal({ current: 0, total: 0, percent: 0 });
   const [uploadProgress, setUploadProgress] = createSignal<UploadProgressState>({
     active: false,
     detail: "",
@@ -990,17 +991,25 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
 
     setIsDeletingSelected(true);
     setMessage(null);
+    setDeleteProgress({ current: 0, total: ids.length, percent: 0 });
+    
     let deleted = 0;
     const failures: string[] = [];
 
     try {
-      for (const entryId of ids) {
+      for (const [index, entryId] of ids.entries()) {
         const payload = await callCrud("delete", { entryId });
         if (payload.ok) {
           deleted += 1;
         } else {
           failures.push(`${entryId}: ${payload.message}`);
         }
+        
+        setDeleteProgress({
+          current: index + 1,
+          total: ids.length,
+          percent: Math.round(((index + 1) / ids.length) * 100)
+        });
       }
 
       setSelectedIds(new Set());
@@ -1019,6 +1028,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
       setMessage({ ok: false, text: error instanceof Error ? error.message : "批次刪除失敗。" });
     } finally {
       setIsDeletingSelected(false);
+      setDeleteProgress({ current: 0, total: 0, percent: 0 });
     }
   }
 
@@ -1429,6 +1439,19 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                           </div>
                         </div>
                       </Show>
+                      
+                      <Show when={isDeletingSelected() && deleteProgress().total > 0}>
+                        <div class="progress-container" role="status">
+                          <div class="progress-info">
+                            <strong>刪除進度: {deleteProgress().current} / {deleteProgress().total}</strong>
+                            <span>{deleteProgress().percent}%</span>
+                          </div>
+                          <div class="progress-bar">
+                            <div class="progress-fill" style={{ width: `${deleteProgress().percent}%` }} />
+                          </div>
+                        </div>
+                      </Show>
+                      
                       <div class="record-table-wrap">
                         <table class="record-table appwrite-record-table">
                           <thead>

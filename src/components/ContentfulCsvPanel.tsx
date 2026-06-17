@@ -46,6 +46,7 @@ export function ContentfulCsvPanel(props: CsvPanelProps) {
   const [csvText, setCsvText] = createSignal("");
   const [isImporting, setIsImporting] = createSignal(false);
   const [isExporting, setIsExporting] = createSignal(false);
+  const [importProgress, setImportProgress] = createSignal({ current: 0, total: 0, percent: 0 });
   const [message, setMessage] = createSignal<{ ok: boolean; text: string } | null>(null);
 
   const tableName = createMemo(() => props.tableName ?? selectedTable());
@@ -107,22 +108,155 @@ export function ContentfulCsvPanel(props: CsvPanelProps) {
 
     setIsImporting(true);
     setMessage(null);
+    setImportProgress({ current: 0, total: 0, percent: 0 });
+    
     try {
-      const payload = await callCsv("importCsv");
-      if (!payload.ok) {
-        setMessage({ ok: false, text: payload.message });
+      // First, parse CSV locally to get total count
+      const rows = parseCsvLocally(csvText());
+      const total = rows.length;
+      
+      if (total === 0) {
+        setMessage({ ok: false, text: "No valid data rows found in CSV." });
         return;
       }
-      setMessage({
-        ok: true,
-        text: `Imported ${payload.imported ?? 0} rows into ${payload.tableName}. Locale: ${payload.locale}`
-      });
-      await props.onImported?.(payload);
+      
+      setImportProgress({ current: 0, total, percent: 0 });
+      
+      let imported = 0;
+      const failures: string[] = [];
+      
+      // Import one by one with progress updates
+      for (const [index, row] of rows.entries()) {
+        try {
+          await importSingleRow(row);
+          imported++;
+          setImportProgress({
+            current: index + 1,
+            total,
+            percent: Math.round(((index + 1) / total) * 100)
+          });
+        } catch (error) {
+          const rowPreview = Object.entries(row).slice(0, 2).map(([k, v]) => `${k}:${String(v).slice(0, 20)}`).join(", ");
+          failures.push(`Row ${index + 1} (${rowPreview}): ${error instanceof Error ? error.message : "Unknown error"}`);
+        }
+      }
+      
+      const locale = await getLocaleFromSettings();
+      
+      if (failures.length === 0) {
+        setMessage({
+          ok: true,
+          text: `Imported ${imported} rows into ${tableName()}. Locale: ${locale}`
+        });
+      } else {
+        setMessage({
+          ok: imported > 0,
+          text: `Imported ${imported}/${total} rows. ${failures.length} failed: ${failures.slice(0, 3).join("; ")}${failures.length > 3 ? `; and ${failures.length - 3} more...` : ""}`
+        });
+      }
+      
+      await props.onImported?.({ ok: true, imported, locale, tableName: tableName() });
     } catch (error) {
       setMessage({ ok: false, text: error instanceof Error ? error.message : "Unable to import CSV." });
     } finally {
       setIsImporting(false);
+      setImportProgress({ current: 0, total: 0, percent: 0 });
     }
+  }
+  
+  async function importSingleRow(row: Record<string, string>) {
+    const response = await fetch("/api/contentful-entries", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create",
+        tableName: tableName(),
+        settings: settingsPayload(),
+        values: row
+      })
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      try {
+        const json = JSON.parse(text) as { ok: false; message: string };
+        throw new Error(json.message || "Import failed");
+      } catch {
+        throw new Error(`Server error (${response.status})`);
+      }
+    }
+    
+    return response.json();
+  }
+  
+  async function getLocaleFromSettings() {
+    try {
+      const response = await fetch("/api/contentful-config", {
+        headers: { Accept: "application/json" }
+      });
+      const data = await response.json();
+      return data.locale || settingsPayload().locale || "en-US";
+    } catch {
+      return settingsPayload().locale || "en-US";
+    }
+  }
+  
+  function parseCsvLocally(text: string): Array<Record<string, string>> {
+    const lines = text.trim().replace(/^\uFEFF/, "").split(/\r?\n/);
+    if (lines.length < 2) return [];
+    
+    const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
+    const rows: Array<Record<string, string>> = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const values = parseCsvLine(line);
+      if (values.some(v => v.trim())) {
+        const row: Record<string, string> = {};
+        headers.forEach((header, index) => {
+          row[header] = values[index] || "";
+        });
+        rows.push(row);
+      }
+    }
+    
+    return rows;
+  }
+  
+  function parseCsvLine(line: string): string[] {
+    const values: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+      
+      if (inQuotes) {
+        if (char === '"' && nextChar === '"') {
+          current += '"';
+          i++;
+        } else if (char === '"') {
+          inQuotes = false;
+        } else {
+          current += char;
+        }
+      } else {
+        if (char === '"') {
+          inQuotes = true;
+        } else if (char === ',') {
+          values.push(current.trim());
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+    }
+    
+    values.push(current.trim());
+    return values;
   }
 
   async function exportCsv() {
@@ -218,6 +352,18 @@ export function ContentfulCsvPanel(props: CsvPanelProps) {
             <p>{current().text}</p>
           </div>
         )}
+      </Show>
+      
+      <Show when={isImporting() && importProgress().total > 0}>
+        <div class="progress-container" role="status">
+          <div class="progress-info">
+            <strong>Importing: {importProgress().current} / {importProgress().total}</strong>
+            <span>{importProgress().percent}%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style={{ width: `${importProgress().percent}%` }} />
+          </div>
+        </div>
       </Show>
     </section>
   );
