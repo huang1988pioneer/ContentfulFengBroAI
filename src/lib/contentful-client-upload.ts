@@ -194,14 +194,30 @@ function uploadToContentfulUploadApi(
 async function pollAssetForUrl(baseUrl: string, headers: HeadersInit, assetId: string, locale: string, onProgress?: UploadProgressCallback) {
   let latest: ContentfulAsset | null = null;
 
-  for (let index = 0; index < 18; index += 1) {
+  // Poll for up to 60 seconds (increased from 18)
+  for (let index = 0; index < 60; index += 1) {
     const response = await fetch(`${baseUrl}/assets/${assetId}`, { headers });
     if (response.ok) {
       latest = (await response.json()) as ContentfulAsset;
-      if (assetUrl(latest, locale)) return latest;
+      const url = assetUrl(latest, locale);
+      if (url) {
+        onProgress?.(85, "Asset ready");
+        return latest;
+      }
     }
-    onProgress?.(70 + Math.min(index, 18), "Contentful processing");
+    
+    // Update progress every 3 seconds
+    if (index % 3 === 0) {
+      const progressPercent = 70 + Math.min(Math.floor(index / 4), 15);
+      onProgress?.(progressPercent, `Processing (${index}s)`);
+    }
+    
     await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  // If still no URL after 60 seconds, throw error
+  if (!latest || !assetUrl(latest, locale)) {
+    throw new Error("Contentful 處理檔案超時（60秒）。檔案可能太大或 Contentful 服務繁忙，請稍後再試或使用較小檔案。");
   }
 
   return latest;
@@ -279,7 +295,14 @@ export async function uploadToContentfulDirect(
   await requestOk(processResponse, "Contentful 處理檔案失敗");
 
   const processedAsset = await pollAssetForUrl(baseUrl, authHeaders, assetId, locale, onProgress);
-  const latestVersion = processedAsset?.sys.version ?? createdAsset.sys.version ?? 1;
+  
+  // Ensure we have a URL before publishing
+  const url = assetUrl(processedAsset, locale);
+  if (!url) {
+    throw new Error("Contentful Asset 已建立但未能取得檔案 URL。請稍後在 Contentful Media 中檢查此 Asset。");
+  }
+  
+  const latestVersion = processedAsset.sys.version ?? createdAsset.sys.version ?? 1;
 
   onProgress?.(86, "Publishing asset");
   const publishAssetResponse = await fetch(`${baseUrl}/assets/${assetId}/published`, {
@@ -293,9 +316,9 @@ export async function uploadToContentfulDirect(
 
   const publishedAssetResponse = await fetch(`${baseUrl}/assets/${assetId}`, { headers: authHeaders });
   const publishedAsset = publishedAssetResponse.ok ? ((await publishedAssetResponse.json()) as ContentfulAsset) : processedAsset;
-  const url = assetUrl(publishedAsset, locale);
+  const finalUrl = assetUrl(publishedAsset, locale);
   const hash = await calculateFileHash(input.file);
-  const missingUrlMessage = url
+  const missingUrlMessage = finalUrl
     ? undefined
     : "Asset 已建立，但 Contentful 尚未產生檔案 URL；資料會先建立，稍後可重新載入確認。";
 
@@ -312,7 +335,7 @@ export async function uploadToContentfulDirect(
         note: appendAssetNote(input.note || "", assetId, missingUrlMessage),
         ref: input.ref || "",
         title,
-        url
+        url: finalUrl
       })
     }),
     headers: {
@@ -334,7 +357,7 @@ export async function uploadToContentfulDirect(
       locale,
       message: `檔案已上傳，但建立資料失敗：${await readResponseText(createEntryResponse)}`,
       partial: true,
-      url
+      url: finalUrl
     };
   }
 
@@ -361,7 +384,7 @@ export async function uploadToContentfulDirect(
       locale,
       message: `資料已建立，但發布失敗：${await readResponseText(publishEntryResponse)}`,
       partial: true,
-      url
+      url: finalUrl
     };
   }
 
@@ -377,6 +400,6 @@ export async function uploadToContentfulDirect(
     locale,
     message: missingUrlMessage,
     partial: Boolean(missingUrlMessage),
-    url
+    url: finalUrl
   };
 }
