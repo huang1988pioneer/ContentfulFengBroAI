@@ -1322,6 +1322,38 @@ body:has(.shell) {
   margin-top: 16px;
 }
 
+.shell .bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 14px;
+  border: 1px solid #fecaca;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #fff1f2;
+  color: #7f1d1d;
+}
+
+.shell .bulk-actions strong,
+.shell .bulk-actions span {
+  display: block;
+}
+
+.shell .bulk-actions span {
+  margin-top: 4px;
+  color: #991b1b;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.shell .bulk-actions-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .shell .record-table-wrap {
   overflow: auto;
   border: 1px solid #d9e2ef;
@@ -1949,6 +1981,19 @@ body:has(.shell) {
 
   .shell .filter-bar {
     padding: 12px;
+  }
+
+  .shell .bulk-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .shell .bulk-actions-buttons {
+    justify-content: stretch;
+  }
+
+  .shell .bulk-actions-buttons button {
+    flex: 1 1 140px;
   }
 
   .shell .quick-filters {

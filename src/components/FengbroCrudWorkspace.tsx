@@ -616,6 +616,8 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
   const [isSaving, setIsSaving] = createSignal(false);
   const [message, setMessage] = createSignal<{ ok: boolean; text: string } | null>(null);
   const [isUploadingMedia, setIsUploadingMedia] = createSignal(false);
+  const [isDeletingSelected, setIsDeletingSelected] = createSignal(false);
+  const [selectedIds, setSelectedIds] = createSignal<Set<string>>(new Set());
   const [uploadProgress, setUploadProgress] = createSignal<UploadProgressState>({
     active: false,
     detail: "",
@@ -687,6 +689,14 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
       return true;
     });
   });
+  const filteredRecordIds = createMemo(() => filteredRecords().map((record) => record.id));
+  const selectedCount = createMemo(() => selectedIds().size);
+  const allFilteredSelected = createMemo(() => {
+    const ids = filteredRecordIds();
+    if (ids.length === 0) return false;
+    const selected = selectedIds();
+    return ids.every((id) => selected.has(id));
+  });
   const autoLoadKey = createMemo(() =>
     [
       activeModule()?.contentType ?? "",
@@ -707,6 +717,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     setQuery("");
     setStatusFilter("all");
     setMonthFilter("all");
+    setSelectedIds(new Set<string>());
     resetDraft();
     mediaFormRef?.reset();
     setMessage(null);
@@ -720,6 +731,13 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     autoLoadKey();
     if (!props.canManage || !activeModule()) return;
     void loadRecords();
+  });
+
+  createEffect(() => {
+    query();
+    statusFilter();
+    monthFilter();
+    setSelectedIds(new Set<string>());
   });
 
   const settingsPayload = () => ({
@@ -921,9 +939,86 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
         return;
       }
       setMessage({ ok: true, text: `已刪除「${recordTitle(record)}」。` });
+      toggleRecordSelection(record.id, false);
       await loadRecords();
     } catch (error) {
       setMessage({ ok: false, text: error instanceof Error ? error.message : "無法刪除資料。" });
+    }
+  }
+
+  function toggleRecordSelection(recordId: string, checked: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) {
+        next.add(recordId);
+      } else {
+        next.delete(recordId);
+      }
+      return next;
+    });
+  }
+
+  function toggleAllFilteredRecords(checked: boolean) {
+    const ids = filteredRecordIds();
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const id of ids) {
+        if (checked) {
+          next.add(id);
+        } else {
+          next.delete(id);
+        }
+      }
+      return next;
+    });
+  }
+
+  async function deleteSelectedRecords() {
+    const module = activeModule();
+    const ids = Array.from(selectedIds());
+    if (!module || ids.length === 0) return;
+
+    const confirmationText = `DELETE ${module.contentType}`;
+    const input = window.prompt(
+      `即將刪除 ${ids.length} 筆「${module.label}」資料。\n請輸入 ${confirmationText} 才會執行刪除。`
+    );
+
+    if (input !== confirmationText) {
+      setMessage({ ok: false, text: `已取消刪除。確認文字必須完全符合：${confirmationText}` });
+      return;
+    }
+
+    setIsDeletingSelected(true);
+    setMessage(null);
+    let deleted = 0;
+    const failures: string[] = [];
+
+    try {
+      for (const entryId of ids) {
+        const payload = await callCrud("delete", { entryId });
+        if (payload.ok) {
+          deleted += 1;
+        } else {
+          failures.push(`${entryId}: ${payload.message}`);
+        }
+      }
+
+      setSelectedIds(new Set());
+      await loadRecords();
+
+      if (failures.length > 0) {
+        setMessage({
+          ok: false,
+          text: `已刪除 ${deleted} 筆，失敗 ${failures.length} 筆。${failures.slice(0, 3).join(" / ")}`
+        });
+        return;
+      }
+
+      setMessage({ ok: true, text: `已刪除 ${deleted} 筆 ${module.contentType} 資料。` });
+    } catch (error) {
+      setMessage({ ok: false, text: error instanceof Error ? error.message : "批次刪除失敗。" });
+    } finally {
+      setIsDeletingSelected(false);
     }
   }
 
@@ -940,79 +1035,106 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     const form = event.currentTarget as HTMLFormElement;
     const formData = new FormData(form);
     const fileInput = form.elements.namedItem("file") as HTMLInputElement | null;
-    const file = fileInput?.files?.[0];
+    const files = Array.from(fileInput?.files ?? []);
 
-    if (!file) {
+    if (files.length === 0) {
       setMessage({ ok: false, text: "請先選擇要上傳的檔案。" });
       return;
     }
 
-    const fileDetail = `${file.name} (${formatFileSize(file.size)})`;
-    if (file.size > CONTENTFUL_DIRECT_UPLOAD_LIMIT_BYTES) {
+    const oversizedFiles = files.filter((file) => file.size > CONTENTFUL_DIRECT_UPLOAD_LIMIT_BYTES);
+    if (oversizedFiles.length > 0) {
       setMessage({
         ok: false,
-        text: `${fileDetail} 超過 ${formatFileSize(CONTENTFUL_DIRECT_UPLOAD_LIMIT_BYTES)}，請選擇較小檔案。`
+        text: `${oversizedFiles.map((file) => `${file.name} (${formatFileSize(file.size)})`).join("、")} 超過 ${formatFileSize(
+          CONTENTFUL_DIRECT_UPLOAD_LIMIT_BYTES
+        )}，請選擇較小檔案。`
       });
       form.reset();
       return;
     }
+
+    const totalFiles = files.length;
+    const totalDetail = totalFiles === 1 ? `${files[0].name} (${formatFileSize(files[0].size)})` : `${totalFiles} 個檔案`;
 
     setMessage(null);
 
     setIsUploadingMedia(true);
     setUploadProgress({
       active: true,
-      detail: fileDetail,
-      label: "準備上傳檔案",
-      percent: 5
+      detail: totalDetail,
+      label: "準備批次上傳",
+      percent: 1
     });
 
     try {
       const uploadSettings = await loadDirectUploadSettings(props.settings);
       setUploadProgress({
         active: true,
-        detail: fileDetail,
+        detail: totalDetail,
         label: "連接 Contentful",
-        percent: 8
+        percent: 2
       });
-      const result = await uploadToContentfulDirect(
-        {
-          ...uploadSettings,
-          kind,
-          fileName: file.name,
-          contentType: file.type,
-          file,
-          displayName: String(formData.get("displayName") ?? ""),
-          category: String(formData.get("category") ?? ""),
-          note: String(formData.get("note") ?? ""),
-          ref: String(formData.get("ref") ?? "")
-        },
-        (percent, progressLabel) => {
-          let label = "上傳到 Contentful";
-          if (percent >= 90) label = "建立資料";
-          else if (percent >= 66) label = "Contentful 處理檔案";
-          else if (percent >= 18) label = "上傳檔案中";
-          setUploadProgress({
-            active: true,
-            detail: fileDetail,
-            label: progressLabel ?? label,
-            percent
-          });
+
+      const successes: string[] = [];
+      const failures: string[] = [];
+      const displayName = String(formData.get("displayName") ?? "").trim();
+      const category = String(formData.get("category") ?? "");
+      const note = String(formData.get("note") ?? "");
+      const ref = String(formData.get("ref") ?? "");
+
+      for (const [index, file] of files.entries()) {
+        const fileDetail = `${index + 1}/${totalFiles} ${file.name} (${formatFileSize(file.size)})`;
+
+        try {
+          const result = await uploadToContentfulDirect(
+            {
+              ...uploadSettings,
+              kind,
+              fileName: file.name,
+              contentType: file.type,
+              file,
+              displayName: totalFiles === 1 ? displayName : displayName ? `${displayName} - ${file.name}` : "",
+              category,
+              note,
+              ref
+            },
+            (percent, progressLabel) => {
+              let label = "上傳到 Contentful";
+              if (percent >= 90) label = "建立資料";
+              else if (percent >= 66) label = "Contentful 處理檔案";
+              else if (percent >= 18) label = "上傳檔案中";
+              setUploadProgress({
+                active: true,
+                detail: fileDetail,
+                label: progressLabel ?? label,
+                percent: Math.min(99, Math.round(((index + percent / 100) / totalFiles) * 100))
+              });
+            }
+          );
+
+          successes.push(result.fileName);
+          if (result.partial && result.message) failures.push(`${result.fileName}: ${result.message}`);
+        } catch (error) {
+          failures.push(`${file.name}: ${error instanceof Error ? error.message : "無法上傳媒體。"}`);
         }
-      );
+      }
 
       form.reset();
       setUploadProgress({
         active: true,
-        detail: fileDetail,
+        detail: totalDetail,
         label: "完成",
         percent: 100
       });
       setMessage({
-        ok: true,
-        text: result.partial
-          ? `已上傳 ${result.fileName} 到 Contentful Media。${result.message ? `後續同步未完成：${result.message}` : "entry 同步狀態未知；請重新載入資料確認。"}`
-          : `已上傳 ${result.fileName}，建立 ${result.contentTypeId} entry。Asset: ${result.assetId}，Entry: ${result.entryId}`
+        ok: failures.length === 0,
+        text:
+          failures.length === 0
+            ? `已上傳 ${successes.length} 個檔案並建立對應資料。`
+            : `已完成 ${successes.length} 個檔案，${failures.length} 個檔案未完成：${failures.slice(0, 3).join("；")}${
+                failures.length > 3 ? "；其餘請重新選擇後再上傳。" : ""
+              }`
       });
       await loadRecords();
     } catch (error) {
@@ -1219,7 +1341,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                       <div class="media-upload-grid">
                         <label>
                           <span>檔案</span>
-                          <input accept={mediaAccept(kind())} name="file" required type="file" onChange={() => setMessage(null)} />
+                          <input accept={mediaAccept(kind())} multiple name="file" required type="file" onChange={() => setMessage(null)} />
                         </label>
                         <label>
                           <span>名稱</span>
@@ -1291,11 +1413,35 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                         </div>
                       }
                     >
+                      <Show when={selectedCount() > 0}>
+                        <div class="bulk-actions" role="status">
+                          <div>
+                            <strong>已選取 {selectedCount()} 筆</strong>
+                            <span>刪除前必須輸入 DELETE {module().contentType}</span>
+                          </div>
+                          <div class="bulk-actions-buttons">
+                            <button class="secondary" type="button" disabled={isDeletingSelected()} onClick={() => setSelectedIds(new Set())}>
+                              取消選取
+                            </button>
+                            <button class="danger" type="button" disabled={isDeletingSelected()} onClick={() => void deleteSelectedRecords()}>
+                              {isDeletingSelected() ? "刪除中..." : "刪除選取資料"}
+                            </button>
+                          </div>
+                        </div>
+                      </Show>
                       <div class="record-table-wrap">
                         <table class="record-table appwrite-record-table">
                           <thead>
                             <tr>
-                              <th class="select-col">選取</th>
+                              <th class="select-col">
+                                <input
+                                  aria-label={`全選 ${module().label} 目前篩選資料`}
+                                  checked={allFilteredSelected()}
+                                  disabled={filteredRecords().length === 0 || isDeletingSelected()}
+                                  type="checkbox"
+                                  onChange={(event) => toggleAllFilteredRecords(event.currentTarget.checked)}
+                                />
+                              </th>
                               <th>服務</th>
                               <For each={visibleColumns()}>{(field) => <th>{fieldLabel(field)}</th>}</For>
                               <th>狀態</th>
@@ -1308,7 +1454,13 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                                 <>
                                   <tr>
                                     <td class="select-col">
-                                      <input aria-label={`選取 ${recordTitle(record)}`} type="checkbox" />
+                                      <input
+                                        aria-label={`選取 ${recordTitle(record)}`}
+                                        checked={selectedIds().has(record.id)}
+                                        disabled={isDeletingSelected()}
+                                        type="checkbox"
+                                        onChange={(event) => toggleRecordSelection(record.id, event.currentTarget.checked)}
+                                      />
                                     </td>
                                     <td>
                                       <strong>
