@@ -382,7 +382,8 @@ function mediaAccept(kind: MediaUploadKind) {
   return ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.md,application/*,text/*";
 }
 
-const DIRECT_UPLOAD_WARNING_BYTES = 4 * 1024 * 1024;
+const SERVER_UPLOAD_LIMIT_BYTES = 4 * 1024 * 1024;
+const CONTENTFUL_BROWSER_DIRECT_NOTE_BYTES = 50 * 1024 * 1024;
 
 function formatFileSize(bytes: number) {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -1001,6 +1002,18 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     }
 
     const fileDetail = `${file.name} (${formatFileSize(file.size)})`;
+    if (file.size > SERVER_UPLOAD_LIMIT_BYTES) {
+      setMessage({
+        ok: false,
+        text:
+          `${fileDetail} 超過目前部署 API 可穩定接收的 ${formatFileSize(SERVER_UPLOAD_LIMIT_BYTES)}。` +
+          `Contentful 本身可處理較大檔案，但這個頁面不能把環境變數 Management Token 暴露給瀏覽器直傳。` +
+          `50MB 以下若要真正直上 Contentful，需要改成使用者手動輸入 CMA token 的直傳模式，或先上傳到外部儲存後填 URL。`
+      });
+      form.reset();
+      return;
+    }
+
     setMessage(null);
 
     setIsUploadingMedia(true);
@@ -1284,7 +1297,10 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                       <div>
                         <h4>上傳{module().label}</h4>
                         <p>建立 Contentful Asset，並同步建立 {module().contentType} entry，填入檔案 URL、hash 與備註。</p>
-                        <p class="info-note">💡 現已改用直接上傳至 Contentful，支援大檔案（付費帳號最高 1 GB）</p>
+                        <p class="info-note">
+                          目前透過 server API 使用環境變數 Management Token，上傳檔案建議小於 {formatFileSize(SERVER_UPLOAD_LIMIT_BYTES)}。
+                          Contentful 可處理較大檔案，但 {formatFileSize(CONTENTFUL_BROWSER_DIRECT_NOTE_BYTES)} 直傳需要瀏覽器端使用者自行提供 CMA token 或改用外部 URL。
+                        </p>
                       </div>
                       <div class="media-upload-grid">
                         <label>
