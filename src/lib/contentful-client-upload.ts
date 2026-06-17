@@ -220,6 +220,15 @@ export async function uploadToContentfulDirect(
   const contentType = input.contentType || "application/octet-stream";
   const contentTypeId = contentTypeIdForKind(input.kind);
   const title = input.displayName || input.fileName;
+  
+  // Truncate filename if too long (Contentful limit is 256 chars)
+  let fileName = input.fileName;
+  if (fileName.length > 200) {
+    const ext = fileName.split('.').pop() || '';
+    const nameWithoutExt = fileName.substring(0, fileName.length - ext.length - 1);
+    fileName = nameWithoutExt.substring(0, 200 - ext.length - 1) + '.' + ext;
+  }
+  
   const baseUrl = `${CONTENTFUL_API}/spaces/${input.spaceId}/environments/${environmentId}`;
   const authHeaders = { Authorization: `Bearer ${token}` };
   const jsonHeaders = { ...authHeaders, "Content-Type": "application/vnd.contentful.management.v1+json" };
@@ -241,7 +250,7 @@ export async function uploadToContentfulDirect(
         file: {
           [locale]: {
             contentType,
-            fileName: input.fileName,
+            fileName: fileName,
             uploadFrom: {
               sys: {
                 type: "Link",
@@ -318,7 +327,7 @@ export async function uploadToContentfulDirect(
       assetId,
       contentTypeId,
       entryId: "",
-      fileName: input.fileName,
+      fileName: fileName,
       fileSize: input.file.size,
       fileType: contentType,
       hash,
@@ -345,7 +354,7 @@ export async function uploadToContentfulDirect(
       assetId,
       contentTypeId,
       entryId: createdEntry.sys.id,
-      fileName: input.fileName,
+      fileName: fileName,
       fileSize: input.file.size,
       fileType: contentType,
       hash,
@@ -361,7 +370,7 @@ export async function uploadToContentfulDirect(
     assetId,
     contentTypeId,
     entryId: createdEntry.sys.id,
-    fileName: input.fileName,
+    fileName: fileName,
     fileSize: input.file.size,
     fileType: contentType,
     hash,
