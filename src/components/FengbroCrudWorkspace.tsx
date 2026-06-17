@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { ContentfulCsvPanel } from "./ContentfulCsvPanel";
 import { TABLE_SCHEMA_LIST, type TableAttribute } from "../lib/table-schemas";
+import { uploadToContentfulDirect } from "../lib/contentful-client-upload";
 
 type ContentfulSettings = {
   spaceId: string;
@@ -29,23 +30,6 @@ type CrudResponse =
   | { ok: false; message: string };
 
 type MediaUploadKind = "document" | "image" | "music" | "podcast" | "video";
-
-type MediaUploadResponse =
-  | {
-      ok: true;
-      partial?: boolean;
-      assetId: string;
-      contentTypeId: string;
-      entryId: string;
-      fileName: string;
-      fileSize: number;
-      fileType: string;
-      hash: string;
-      locale: string;
-      message?: string;
-      url: string;
-    }
-  | { ok: false; message: string };
 
 type UploadProgressState = {
   active: boolean;
@@ -382,8 +366,7 @@ function mediaAccept(kind: MediaUploadKind) {
   return ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.md,application/*,text/*";
 }
 
-const SERVER_UPLOAD_LIMIT_BYTES = 4 * 1024 * 1024;
-const CONTENTFUL_BROWSER_DIRECT_NOTE_BYTES = 50 * 1024 * 1024;
+const CONTENTFUL_DIRECT_UPLOAD_LIMIT_BYTES = 50 * 1024 * 1024;
 
 function formatFileSize(bytes: number) {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -391,42 +374,28 @@ function formatFileSize(bytes: number) {
   return `${bytes} B`;
 }
 
-function fileToDataUrl(file: File, onProgress?: (percent: number) => void) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("無法讀取檔案，請重新選擇後再上傳。"));
-    reader.onprogress = (event) => {
-      if (event.lengthComputable) {
-        onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)));
-      }
-    };
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.readAsDataURL(file);
+async function loadDirectUploadSettings(fallback: ContentfulSettings) {
+  const response = await fetch("/api/contentful-direct-config", {
+    headers: { Accept: "application/json" }
   });
-}
+  const payload = (await response.json()) as
+    | {
+        ok: true;
+        environmentId: string;
+        locale: string;
+        managementToken: string;
+        spaceId: string;
+      }
+    | { ok: false; message: string };
 
-function postUploadJson(body: Record<string, unknown>, onProgress: (percent: number) => void) {
-  return new Promise<{ ok: boolean; status: number; statusText: string; text: string }>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/contentful-upload");
-    xhr.setRequestHeader("Content-Type", "application/json");
-    xhr.timeout = 120000;
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) {
-        onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
-      }
-    };
-    xhr.onerror = () => reject(new Error("上傳連線中斷，請確認網路後再試。"));
-    xhr.ontimeout = () => reject(new Error("上傳等待超時，影片或音樂檔可能太大，請改用較小檔案或外部 URL。"));
-    xhr.onload = () =>
-      resolve({
-        ok: xhr.status >= 200 && xhr.status < 300,
-        status: xhr.status,
-        statusText: xhr.statusText,
-        text: xhr.responseText ?? ""
-      });
-    xhr.send(JSON.stringify(body));
-  });
+  if (!payload.ok) throw new Error("上傳設定尚未完成，請稍後再試。");
+
+  return {
+    environmentId: fallback.environmentId || payload.environmentId,
+    locale: fallback.locale || payload.locale,
+    managementToken: payload.managementToken,
+    spaceId: fallback.spaceId || payload.spaceId
+  };
 }
 
 function normalizeMediaUrl(value: unknown) {
@@ -941,46 +910,6 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     }
   }
 
-  function readMediaUploadResponse(
-    response: { ok: boolean; status: number; statusText: string; text: string },
-    fallback: { contentTypeId: string; fileName: string }
-  ): MediaUploadResponse {
-    const text = response.text;
-    try {
-      return JSON.parse(text) as MediaUploadResponse;
-    } catch {
-      const trimmed = text.replace(/\s+/g, " ").trim();
-      if (response.ok && !trimmed) {
-        return {
-          ok: true,
-          partial: true,
-          assetId: "unknown",
-          contentTypeId: fallback.contentTypeId,
-          entryId: "unknown",
-          fileName: fallback.fileName,
-          fileSize: 0,
-          fileType: "",
-          hash: "",
-          locale: props.settings.locale,
-          url: ""
-        };
-      }
-      const isHtmlError = /<!doctype html|<html|stormkit\s*-\s*errors/i.test(trimmed);
-      const isTooLarge = response.status === 413 || /request entity too large/i.test(trimmed);
-      const platformMessage =
-        response.status >= 500 && isHtmlError
-          ? "部署平台回傳 HTML 錯誤頁，通常是檔案大小或請求限制造成。請改用較小檔案，或先上傳到外部儲存後再填 URL。"
-          : null;
-      return {
-        ok: false,
-        message: isTooLarge
-          ? "檔案太大，部署平台拒絕這次上傳。請改用較小檔案，或先把檔案上傳到外部儲存後再填 URL。"
-          : (platformMessage ??
-            `Upload failed with a non-JSON response${response.status ? ` (${response.status})` : ""}: ${(trimmed || response.statusText).slice(0, 260)}`)
-      };
-    }
-  }
-
   async function uploadMedia(event: SubmitEvent) {
     event.preventDefault();
     const kind = activeMediaKind();
@@ -1002,13 +931,10 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     }
 
     const fileDetail = `${file.name} (${formatFileSize(file.size)})`;
-    if (file.size > SERVER_UPLOAD_LIMIT_BYTES) {
+    if (file.size > CONTENTFUL_DIRECT_UPLOAD_LIMIT_BYTES) {
       setMessage({
         ok: false,
-        text:
-          `${fileDetail} 超過目前部署 API 可穩定接收的 ${formatFileSize(SERVER_UPLOAD_LIMIT_BYTES)}。` +
-          `Contentful 本身可處理較大檔案，但這個頁面不能把環境變數 Management Token 暴露給瀏覽器直傳。` +
-          `50MB 以下若要真正直上 Contentful，需要改成使用者手動輸入 CMA token 的直傳模式，或先上傳到外部儲存後填 URL。`
+        text: `${fileDetail} 超過 ${formatFileSize(CONTENTFUL_DIRECT_UPLOAD_LIMIT_BYTES)}，請選擇較小檔案。`
       });
       form.reset();
       return;
@@ -1025,66 +951,38 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
     });
 
     try {
-      const fileData = await fileToDataUrl(file, (percent) => {
-        setUploadProgress({
-          active: true,
-          detail: fileDetail,
-          label: "讀取檔案中",
-          percent: Math.max(3, Math.min(35, Math.round(percent * 0.35)))
-        });
-      });
+      const uploadSettings = await loadDirectUploadSettings(props.settings);
       setUploadProgress({
         active: true,
         detail: fileDetail,
-        label: "送出到伺服器",
-        percent: 38
+        label: "連接 Contentful",
+        percent: 8
       });
-      const response = await postUploadJson(
+      const result = await uploadToContentfulDirect(
         {
+          ...uploadSettings,
           kind,
           fileName: file.name,
           contentType: file.type,
-          fileData,
+          file,
           displayName: String(formData.get("displayName") ?? ""),
           category: String(formData.get("category") ?? ""),
           note: String(formData.get("note") ?? ""),
-          ref: String(formData.get("ref") ?? ""),
-          spaceId: props.settings.spaceId,
-          environmentId: props.settings.environmentId,
-          locale: props.settings.locale,
-          managementToken: props.settings.managementToken
+          ref: String(formData.get("ref") ?? "")
         },
         (percent) => {
+          let label = "上傳到 Contentful";
+          if (percent >= 90) label = "建立資料";
+          else if (percent >= 66) label = "Contentful 處理檔案";
+          else if (percent >= 18) label = "上傳檔案中";
           setUploadProgress({
             active: true,
             detail: fileDetail,
-            label: "上傳資料中",
-            percent: 35 + Math.round(percent * 0.4)
+            label,
+            percent
           });
         }
       );
-      setUploadProgress({
-        active: true,
-        detail: fileDetail,
-        label: "Contentful 處理檔案與建立 entry",
-        percent: 86
-      });
-      const result = readMediaUploadResponse(response, {
-        contentTypeId: activeModule()?.contentType ?? kind,
-        fileName: file.name
-      });
-
-      if (!result.ok) {
-        form.reset();
-        setUploadProgress({
-          active: false,
-          detail: "",
-          label: "",
-          percent: 0
-        });
-        setMessage({ ok: false, text: result.message });
-        return;
-      }
 
       form.reset();
       setUploadProgress({
@@ -1298,8 +1196,7 @@ export function FengbroCrudWorkspace(props: { canManage: boolean; settings: Cont
                         <h4>上傳{module().label}</h4>
                         <p>建立 Contentful Asset，並同步建立 {module().contentType} entry，填入檔案 URL、hash 與備註。</p>
                         <p class="info-note">
-                          目前透過 server API 使用環境變數 Management Token，上傳檔案建議小於 {formatFileSize(SERVER_UPLOAD_LIMIT_BYTES)}。
-                          Contentful 可處理較大檔案，但 {formatFileSize(CONTENTFUL_BROWSER_DIRECT_NOTE_BYTES)} 直傳需要瀏覽器端使用者自行提供 CMA token 或改用外部 URL。
+                          可直接上傳 {formatFileSize(CONTENTFUL_DIRECT_UPLOAD_LIMIT_BYTES)} 以下檔案到 Contentful，完成後會自動建立對應資料。
                         </p>
                       </div>
                       <div class="media-upload-grid">
