@@ -206,7 +206,7 @@ export async function uploadToContentfulDirect(
   if (!input.spaceId) throw new Error("缺少 Contentful Space ID。");
 
   const environmentId = input.environmentId || "master";
-  const locale = input.locale || "zh-TW";
+  const locale = input.locale || "en-US";
   const contentType = input.contentType || "application/octet-stream";
   const contentTypeId = contentTypeIdForKind(input.kind);
   const title = input.displayName || input.fileName;
