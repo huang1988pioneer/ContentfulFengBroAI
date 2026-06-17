@@ -1933,6 +1933,38 @@ body:has(.shell) {
     grid-template-columns: 1fr;
   }
 
+  .shell .appwrite-like .module-nav {
+    position: static;
+    max-height: 360px;
+    margin-bottom: 16px;
+    border-right: 0;
+    border-bottom: 1px solid #e7ddcc;
+    padding-right: 0;
+    padding-bottom: 14px;
+  }
+
+  .shell .appwrite-like .module-button {
+    border-radius: 18px;
+  }
+
+  .shell .filter-bar {
+    padding: 12px;
+  }
+
+  .shell .quick-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .shell .quick-filters button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .shell .advanced-filters {
+    grid-template-columns: 1fr;
+  }
+
   .shell .common-sites-heading {
     display: grid;
   }
